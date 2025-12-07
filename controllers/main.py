@@ -27,6 +27,19 @@ def clean_for_json(obj):
 
 class TableauDeBordController(http.Controller):
 
+    @http.route('/tableau_de_bord/save_filter', type='json', auth='user')
+    def save_filter(self, dashboard_id=None, filter_value=''):
+        """Sauvegarde le filtre pour l'utilisateur courant"""
+        if dashboard_id:
+            request.env['is.tableau.de.bord.mem.filter'].save_filter(dashboard_id, filter_value)
+        return {'success': True}
+
+    @http.route('/tableau_de_bord/get_saved_filter/<int:dashboard_id>', type='json', auth='user')
+    def get_saved_filter(self, dashboard_id):
+        """Récupère le dernier filtre saisi pour l'utilisateur courant"""
+        filter_value = request.env['is.tableau.de.bord.mem.filter'].get_filter(dashboard_id)
+        return {'filter_value': filter_value}
+
     @http.route('/tableau_de_bord/get_filter_data/<int:filter_id>', type='json', auth='user')
     def get_filter_data(self, filter_id, line_id=None, **kwargs):
         """Récupère les données d'un filtre pour l'afficher dans le tableau de bord"""
@@ -35,6 +48,8 @@ class TableauDeBordController(http.Controller):
             if not line_id:
                 line_id = kwargs.get('line_id')
             overrides = kwargs.get('overrides') or {}
+            dashboard_id = kwargs.get('dashboard_id')
+            filter_value = kwargs.get('filter_value')
             
             filter_obj = request.env['ir.filters'].browse(filter_id)
             if not filter_obj.exists():
@@ -49,6 +64,26 @@ class TableauDeBordController(http.Controller):
                     domain = ast.literal_eval(filter_obj.domain)
                 except Exception:
                     domain = []
+
+            # Appliquer le filtre dynamique si défini
+            if filter_value and line_id and dashboard_id:
+                try:
+                    line = request.env['is.tableau.de.bord.line'].browse(int(line_id))
+                    if line and line.exists() and line.filter_field_id:
+                        field_name = line.filter_field_id.name
+                        field_type = line.filter_field_id.ttype
+                        
+                        # Construire la condition de filtre selon le type de champ
+                        if field_type in ['char', 'text']:
+                            # Recherche insensible à la casse avec ilike
+                            filter_condition = (field_name, 'ilike', filter_value)
+                            domain.append(filter_condition)
+                        elif field_type == 'many2one':
+                            # Recherche sur le display_name du many2one
+                            filter_condition = (field_name + '.name', 'ilike', filter_value)
+                            domain.append(filter_condition)
+                except Exception as e:
+                    pass
 
             # Récupérer le contexte du filtre
             context = {}

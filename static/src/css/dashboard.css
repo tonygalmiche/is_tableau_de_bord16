@@ -1,8 +1,29 @@
 /* Styles pour le tableau de bord */
 
+/* Container du filtre */
+.o_dashboard_filter_container {
+    position: relative;
+    z-index: 10;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Widget de filtre */
+.dashboard-filter-widget {
+    position: relative;
+    z-index: 11;
+}
+
+.dashboard-filter-widget input {
+    z-index: 12 !important;
+    position: relative;
+}
+
 .o_dashboard_view {
     padding: 0;
-    margin-top: -1.5rem !important;
+    margin-top: 0 !important;
+    position: relative;
+    z-index: 1;
 }
 
 .dashboard-item {

@@ -85,6 +85,7 @@
                             <field name="user_id" options="{'no_create': True}"/>
                             <field name="filter_domain" invisible="1"/>
                             <field name="filter_id" options="{'no_create': True}" domain="[('user_id', '!=', False), ('model_id', '=', model_name), ('user_id', '=', user_id)]"/>
+                            <field name="filter_field_id" options="{'no_create': True, 'no_open': True}"/>
                         </group>
                         <group string="Affichage">
                             <field name="name"/>
@@ -158,10 +159,19 @@
         <field name="model">is.tableau.de.bord</field>
         <field name="priority" eval="99"/>
         <field name="arch" type="xml">
-            <form string="Tableau de bord" class="o_dashboard_form">
-                <!-- <header>
-                    <button string="Modifier le tableau de bord" type="object" name="action_edit_dashboard" class="btn-primary" groups="is_tableau_de_bord16.group_tableau_de_bord_manager"/>
-                </header> -->
+            <form string="Tableau de bord" class="o_dashboard_form" style="padding-top: 0 !important;">
+                <div class="o_dashboard_filter_container p-2 bg-light border-bottom">
+                    <div class="row align-items-center">
+                        <div class="col-md-4">
+                            <span class="fw-bold me-2">Filtre :</span>
+                            <input type="text" 
+                                   id="dashboard_filter_input" 
+                                   class="o_input form-control d-inline-block" 
+                                   placeholder="Saisissez un texte pour filtrer les données..." 
+                                   style="width: 300px;"/>
+                        </div>
+                    </div>
+                </div>
                 <div class="o_dashboard_view">
                     <div id="dashboard_container" class="container-fluid p-0">
                         <!-- Les éléments seront générés dynamiquement par JavaScript -->
@@ -176,6 +186,7 @@
                                 <field name="model_id"/>
                                 <field name="user_id"/>
                                 <field name="filter_id"/>
+                                <field name="filter_field_id"/>
                                 <field name="width"/>
                                 <field name="height"/>
                                 <field name="display_mode"/>
@@ -407,6 +418,55 @@ action = records.action_refresh_all_lines_from_filters()
               action="is_tableau_de_bord_action_config"
               groups="group_tableau_de_bord_manager"
               sequence="20"/>
+
+    <!-- Menu dans Paramètres / Utilisateurs et sociétés pour voir les filtres mémorisés -->
+    <record id="is_tableau_de_bord_mem_filter_action" model="ir.actions.act_window">
+        <field name="name">Filtres mémorisés des tableaux de bord</field>
+        <field name="res_model">is.tableau.de.bord.mem.filter</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">
+                Aucun filtre mémorisé
+            </p>
+            <p>
+                Cette liste affiche tous les filtres saisis par les utilisateurs dans les tableaux de bord.
+            </p>
+        </field>
+    </record>
+
+    <record id="is_tableau_de_bord_mem_filter_view_tree" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.mem.filter.tree</field>
+        <field name="model">is.tableau.de.bord.mem.filter</field>
+        <field name="arch" type="xml">
+            <tree string="Filtres mémorisés">
+                <field name="tableau_id"/>
+                <field name="user_id"/>
+                <field name="filter_value"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="is_tableau_de_bord_mem_filter_view_form" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.mem.filter.form</field>
+        <field name="model">is.tableau.de.bord.mem.filter</field>
+        <field name="arch" type="xml">
+            <form string="Filtre mémorisé">
+                <sheet>
+                    <group>
+                        <field name="tableau_id"/>
+                        <field name="user_id"/>
+                        <field name="filter_value"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <menuitem id="menu_is_tableau_de_bord_mem_filter"
+              name="Filtres mémorisés des tableaux de bord"
+              parent="base.menu_users"
+              action="is_tableau_de_bord_mem_filter_action"
+              sequence="100"/>
 
 
 </odoo>
