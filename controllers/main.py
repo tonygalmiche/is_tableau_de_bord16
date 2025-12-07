@@ -144,8 +144,8 @@ class TableauDeBordController(http.Controller):
             if field_type == 'many2one':
                 return self._parse_text_filter(field_name + '.name', filter_value)
                 
-        except Exception as e:
-            print(f"Erreur parse filter: {e}")
+        except Exception:
+            pass
         
         return domain
     
@@ -168,12 +168,10 @@ class TableauDeBordController(http.Controller):
         # Gérer les wildcards
         if '*' in filter_value:
             pattern = filter_value.replace('*', '%')
-            print(f"[TEXT FILTER] Original: '{filter_value}' => Pattern: '{pattern}'")
             return [(field_name, 'ilike', pattern)]
         else:
             # Recherche contient par défaut (ajouter % des 2 côtés)
             pattern = f'%{filter_value}%'
-            print(f"[TEXT FILTER] Original: '{filter_value}' => Pattern (contains): '{pattern}'")
             return [(field_name, 'ilike', pattern)]
 
     def _parse_date_filter(self, field_name, filter_value):
@@ -263,8 +261,8 @@ class TableauDeBordController(http.Controller):
             elif re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
                 domain.append((field_name, operator, date_str))
                 
-        except Exception as e:
-            print(f"Erreur parse date: {e}")
+        except Exception:
+            pass
         
         return domain
 
@@ -292,12 +290,6 @@ class TableauDeBordController(http.Controller):
             dashboard_id = kwargs.get('dashboard_id')
             filters_values = kwargs.get('filters_values') or {}
             
-            print(f"\n=== FILTRES REÇUS ===")
-            print(f"filter_id: {filter_id}")
-            print(f"line_id: {line_id}")
-            print(f"filters_values: {filters_values}")
-            print(f"dashboard_id: {dashboard_id}")
-            
             filter_obj = request.env['ir.filters'].browse(filter_id)
             if not filter_obj.exists():
                 return {'error': 'Filtre non trouvé'}
@@ -312,14 +304,11 @@ class TableauDeBordController(http.Controller):
                 except Exception:
                     domain = []
 
-            print(f"Domaine initial: {domain}")
-
             # Appliquer les filtres dynamiques si définis
             if filters_values and line_id:
                 try:
                     line = request.env['is.tableau.de.bord.line'].browse(int(line_id))
                     if line and line.exists() and line.line_filter_ids:
-                        print(f"Nombre de line_filter_ids: {len(line.line_filter_ids)}")
                         for line_filter in line.line_filter_ids:
                             filter_def_id = line_filter.filter_def_id.id
                             # Convertir les clés du dictionnaire en int pour la comparaison
@@ -329,26 +318,20 @@ class TableauDeBordController(http.Controller):
                                     filter_value = val
                                     break
                             
-                            print(f"  - Checking filter_def_id={filter_def_id}, filter_value={filter_value}")
                             if filter_value:
                                 field_name = line_filter.field_id.name
                                 field_type = line_filter.field_id.ttype
                                 filter_type = line_filter.filter_def_id.filter_type
                                 
-                                print(f"    Applying filter: field={field_name}, type={filter_type}, value={filter_value}")
-                                
                                 # Utiliser le parser avancé
                                 parsed_domain = self._parse_filter_value(field_name, field_type, filter_value, filter_type)
                                 if parsed_domain:
                                     domain.extend(parsed_domain)
-                                    print(f"      Added filter domain: {parsed_domain}")
-                except Exception as e:
-                    print(f"ERREUR lors de l'application des filtres: {e}")
+                except Exception:
                     import traceback
                     traceback.print_exc()
 
             print(f"Domaine final: {domain}")
-            print("==================\n")
 
             # Récupérer le contexte du filtre
             context = {}
@@ -433,22 +416,16 @@ class TableauDeBordController(http.Controller):
 
             # Déterminer le type de vue à utiliser
             view_type = self._get_view_type_from_context(ctx)
-            
-            print(f"\n[VIEW TYPE] Detected view_type: {view_type}")
 
             model = model.with_context(ctx)
             if view_type == 'graph':
-                print(f"[VIEW TYPE] Calling _get_graph_data")
                 return self._get_graph_data(model, filter_obj, domain, ctx, line)
             elif view_type == 'pivot':
-                print(f"[VIEW TYPE] Calling _get_pivot_data")
                 return self._get_pivot_data(model, filter_obj, domain, ctx, line)
             else:
-                print(f"[VIEW TYPE] Calling _get_list_data")
                 return self._get_list_data(model, filter_obj, domain, ctx, line)
 
         except Exception as e:
-            print(f"[ERROR in get_filter_data] {e}")
             import traceback
             traceback.print_exc()
             return {'error': 'Une erreur s\'est produite'}
@@ -572,46 +549,21 @@ class TableauDeBordController(http.Controller):
         # Récupérer les métadonnées complètes des champs pour le formatage
         fields_def = model.fields_get(fields_to_display)
         
-        print(f"\n[LIST DATA DEBUG] list_groupby={list_groupby}, fields_to_display={fields_to_display}")
-        
         # Si regroupement défini, utiliser read_group au lieu de search/read
         if list_groupby:
-            print(f"[LIST DATA DEBUG] Using GROUPED list data")
             return self._get_grouped_list_data(
                 model, filter_obj, domain, context, line,
                 list_groupby, fields_to_display, field_labels, fields_def,
                 order_string, limit, show_record_count
             )
         
-        print(f"[LIST DATA DEBUG] Using NORMAL list data")
         # Mode normal sans regroupement
         # Appliquer le tri si défini
-        print(f"\n[BEFORE SEARCH] Domain: {domain}, Limit: {limit}, Order: {order_string}")
         
         if order_string:
             recs = model.search(domain, limit=limit, order=order_string)
         else:
             recs = model.search(domain, limit=limit)
-        
-        # DEBUG: Afficher les résultats
-        print(f"[SEARCH RESULTS] Found {len(recs)} records")
-        try:
-            if recs:
-                print(f"[SEARCH RESULTS] First 10 IDs: {recs.ids[:10]}")
-                if 'name' in model._fields:
-                    names = [r.name if hasattr(r, 'name') else 'N/A' for r in recs[:10]]
-                    print(f"[SEARCH RESULTS] Names: {names}")
-                if 'client_id' in model._fields:
-                    clients = []
-                    for r in recs[:10]:
-                        if hasattr(r, 'client_id') and r.client_id:
-                            clients.append((r.id, r.client_id.name))
-                        else:
-                            clients.append((r.id, 'N/A'))
-                    print(f"[SEARCH RESULTS] Clients: {clients}")
-        except Exception as e:
-            print(f"[SEARCH RESULTS ERROR] {e}")
-        print()
             
         # Lire les données et convertir en dictionnaires normaux pour éviter les frozendict
         raw_data = recs.read(fields_to_display) if recs else []
@@ -680,7 +632,6 @@ class TableauDeBordController(http.Controller):
         - Une ligne de total par groupe de niveau 1 (ex: Secteur)
         - En dessous, les lignes de détail du niveau 2 (ex: Partner) avec la colonne niveau 1 vide
         """
-        print(f"\n[GROUPED LIST] Domain: {domain}, Groupby: {list_groupby}")
         
         # Parser order_string pour le tri après read_group
         # Format: "field1 asc, field2 desc"
@@ -1079,26 +1030,10 @@ class TableauDeBordController(http.Controller):
             
             agg_label = f"{agg_french} de {measure_field_name}"
 
-        print(f"[GRAPH DATA] Domain: {domain}")
-        print(f"[GRAPH DATA] Groupbys: {groupbys}")
-        print(f"[GRAPH DATA] Measure: {measure}, Use count: {use_count}")
-        
         try:
             # NE PAS appliquer limit dans read_group (on le fera après le tri)
             results = model.read_group(domain, fields=fields, groupby=groupbys, lazy=False)
-            print(f"[GRAPH DATA] Read_group returned {len(results)} groups")
-            for idx, r in enumerate(results):
-                print(f"[GRAPH DATA] Group {idx}: {r}")
-                # Vérifier le nom réel du client
-                if 'client_id' in r and r['client_id']:
-                    client_id_val = r['client_id'][0] if isinstance(r['client_id'], (list, tuple)) else r['client_id']
-                    try:
-                        client = request.env['res.partner'].sudo().browse(client_id_val)
-                        print(f"[GRAPH DATA] Client {client_id_val} - name field: '{client.name}'")
-                    except Exception as e:
-                        print(f"[GRAPH DATA] Could not read client {client_id_val}: {e}")
-        except Exception as e:
-            print(f"[GRAPH DATA] Read_group failed: {e}")
+        except Exception:
             results = []
 
         # Construire les labels et valeurs
@@ -1109,7 +1044,6 @@ class TableauDeBordController(http.Controller):
                 for gb in groupbys:
                     base = gb.split(':')[0]
                     val = r.get(gb) or r.get(base) or r.get(f"{gb}_name") or r.get(f"{base}_name")
-                    print(f"[GRAPH LABEL] Groupby: {gb}, Base: {base}, Value from record: {val}")
                     # Pour les many2one (tuple/list), prendre le display_name (2ème élément)
                     if isinstance(val, (list, tuple)) and len(val) > 1:
                         label_parts.append(str(val[1]) if val[1] is not None else '')
@@ -1118,7 +1052,6 @@ class TableauDeBordController(http.Controller):
                     else:
                         label_parts.append('')
                 label = " / ".join([p for p in label_parts if p])
-                print(f"[GRAPH LABEL] Final label: '{label}' from parts: {label_parts}")
                 
                 if use_count:
                     value = r.get("__count") or 0
