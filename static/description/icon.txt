@@ -1,0 +1,2 @@
+# Cette icône sera remplacée par une vraie icône PNG
+# Pour l'instant, le module fonctionnera sans icône personnalisée

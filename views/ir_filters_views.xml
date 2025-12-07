@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Vue formulaire spécifique pour ir.filters dans le contexte tableau de bord -->
+    <record id="view_ir_filters_form_tableau_de_bord" model="ir.ui.view">
+        <field name="name">ir.filters.form.tableau.de.bord</field>
+        <field name="model">ir.filters</field>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <form string="Recherche enregistrée">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                        </group>
+                        <group >
+                            <field name="model_id" readonly="1"/>
+                            <field name="user_id" readonly="1"/>
+                            <field name="is_default" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Filtre (Domaine)" name="domain">
+                            <group>
+                                <field name="domain" widget="domain" options="{'model': 'model_id'}" nolabel="1"/>
+                            </group>
+                        </page>
+                        <page string="Détails techniques" name="technical">
+                            <group string="Détails techniques">
+                                <field name="context" readonly="1"/>
+                                <field name="sort" readonly="1"/>
+                                <field name="action_id" readonly="1"/>
+                                <field name="active" readonly="1"/>
+                            </group>
+                            <group string="Configuration de la vue" readonly="1">
+                                <field name="is_menu_id"  readonly="1"/>
+                                <field name="is_view_id"  readonly="1"/>
+                                <field name="is_view_type"  readonly="1"/>
+                                <field name="is_visible_columns" readonly="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action pour ouvrir les recherches enregistrées avec notre vue personnalisée -->
+    <record id="action_ir_filters_tableau_de_bord" model="ir.actions.act_window">
+        <field name="name">Recherches enregistrées</field>
+        <field name="res_model">ir.filters</field>
+        <field name="view_mode">tree,form</field>
+        <field name="view_id" ref="base.ir_filters_view_tree"/>
+        <field name="context">{'search_default_my_filters': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Aucune recherche enregistrée
+            </p>
+            <p>
+                Les recherches enregistrées (favoris) créées depuis les différentes vues apparaîtront ici.
+            </p>
+        </field>
+    </record>
+
+    <!-- Forcer l'utilisation de notre vue formulaire pour cette action -->
+    <record id="action_ir_filters_form_view" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_ir_filters_form_tableau_de_bord"/>
+        <field name="act_window_id" ref="action_ir_filters_tableau_de_bord"/>
+    </record>
+
+    <!-- Héritage de la vue liste ir.filters pour afficher les nouveaux champs -->
+    <record id="view_ir_filters_tree_inherit" model="ir.ui.view">
+        <field name="name">ir.filters.tree.inherit.tableau.de.bord</field>
+        <field name="model">ir.filters</field>
+        <field name="inherit_id" ref="base.ir_filters_view_tree"/>
+        <field name="arch" type="xml">
+            <!-- Ajouter les colonnes pour menu et vue -->
+            <field name="model_id" position="after">
+                <field name="is_menu_id" optional="hide"/>
+                <field name="is_view_type" optional="hide"/>
+            </field>
+        </field>
+    </record>
+
+</odoo>

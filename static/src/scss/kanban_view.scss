@@ -1,0 +1,99 @@
+/* Styles pour la vue Kanban des tableaux de bord uniquement */
+.o_kanban_view.o_kanban_dashboard .oe_kanban_card {
+    border-radius: 10px !important;
+    margin-bottom: 10pt !important;
+    padding: 5pt !important;
+    
+    /* Bordure et ombre */
+    border: 2px solid #cccccc !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+    .o_kanban_record_top {
+        padding: 0 !important;
+    }
+
+    /* Style du titre : centré, gras, plus gros */
+    .o_kanban_record_title {
+        text-align: center;
+        font-weight: bold;
+        font-size: 1.1rem;
+        display: block;
+        width: 100%;
+    }
+
+    /* Dégradés de couleurs pour les cartes */
+    &.oe_kanban_color_0 { 
+        background-color: #ffffff !important; 
+        color: #212529; 
+    }
+    &.oe_kanban_color_1 { 
+        background: linear-gradient(to bottom, #f06050, rgba(#f06050, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_2 { 
+        background: linear-gradient(to bottom, #f4a460, rgba(#f4a460, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_3 { 
+        background: linear-gradient(to bottom, #f7cd1f, rgba(#f7cd1f, 0.7)) !important; 
+        color: black; 
+    }
+    &.oe_kanban_color_4 { 
+        background: linear-gradient(to bottom, #6cc1ed, rgba(#6cc1ed, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_5 { 
+        background: linear-gradient(to bottom, #814968, rgba(#814968, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_6 { 
+        background: linear-gradient(to bottom, #eb7e7f, rgba(#eb7e7f, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_7 { 
+        background: linear-gradient(to bottom, #2c8397, rgba(#2c8397, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_8 { 
+        background: linear-gradient(to bottom, #475577, rgba(#475577, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_9 { 
+        background: linear-gradient(to bottom, #d6145f, rgba(#d6145f, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_10 { 
+        background: linear-gradient(to bottom, #30c381, rgba(#30c381, 0.7)) !important; 
+        color: white; 
+    }
+    &.oe_kanban_color_11 { 
+        background: linear-gradient(to bottom, #9365b8, rgba(#9365b8, 0.7)) !important; 
+        color: white; 
+    }
+
+    /* Supprime le liseret gauche par défaut d'Odoo */
+    &::after {
+        display: none !important;
+    }
+    
+    border-left: 0 !important;
+
+    /* Ajustement pour les éléments internes avec fond foncé */
+    &.oe_kanban_color_1, &.oe_kanban_color_2, &.oe_kanban_color_4, 
+    &.oe_kanban_color_5, &.oe_kanban_color_6, &.oe_kanban_color_7, 
+    &.oe_kanban_color_8, &.oe_kanban_color_9, &.oe_kanban_color_10, 
+    &.oe_kanban_color_11 {
+        .o_kanban_record_top, .o_kanban_record_body {
+            background-color: transparent !important;
+        }
+        .text-muted {
+            color: rgba(255, 255, 255, 0.8) !important;
+        }
+        .o_kanban_record_title {
+            color: white !important;
+        }
+        .o_dropdown_kanban .dropdown-toggle {
+            color: white !important;
+        }
+    }
+}

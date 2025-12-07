@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Vue formulaire du tableau de bord -->
+    <record id="view_is_tableau_de_bord_form_view" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.form</field>
+        <field name="model">is.tableau.de.bord</field>
+        <field name="priority" eval="16"/>
+        <field name="arch" type="xml">
+            <form string="Tableau de bord">
+                <header>
+                    <button name="action_view_dashboard" string="Voir le tableau de bord" type="object" class="btn-primary" attrs="{'invisible': [('id', '=', False)]}"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="description" widget="text"/>
+                        </group>
+                        <group>
+                            <field name="color" widget="color_picker"/>
+                            <field name="image" widget="image" class="oe_avatar"/>
+                        </group>
+                    </group>
+                    <group string="Éléments du tableau de bord">
+                        <field name="line_ids" context="{'form_view_ref': 'is_tableau_de_bord16.view_is_tableau_de_bord_line_edit_form'}">
+                            <tree>
+                                <field name="sequence" widget="handle"/>
+                                <button name="action_open_filter" type="object" icon="fa-eye"    title="Ouvrir en plein écran" attrs="{'invisible': [('filter_id', '=', False)]}"/>
+                                <button name="action_edit_filter" type="object" icon="fa-search" title="Ouvrir le filtre"      attrs="{'invisible': [('filter_id', '=', False)]}"/>
+                                <button name="action_duplicate_line" type="object" icon="fa-copy" title="Dupliquer cette ligne"/>
+                                <field name="name"/>
+                                <field name="model_id" optional="show"/>
+                                <field name="user_id" optional="hide"/>
+                                <field name="filter_id" optional="hide"/>
+                                <field name="width" optional="show"/>
+                                <field name="height" optional="show"/>
+                                <field name="display_mode" optional="show"/>
+                                <field name="graph_chart_type" optional="hide"/>
+                                <field name="graph_aggregator" optional="hide"/>
+                                <field name="graph_show_legend" optional="hide"/>
+                                <field name="pivot_row_groupby" optional="hide"/>
+                                <field name="pivot_col_groupby" optional="hide"/>
+                                <field name="pivot_measure" optional="hide"/>
+                                <field name="pivot_sort_by" optional="hide"/>
+                                <field name="pivot_sort_order" optional="hide"/>
+                                <field name="pivot_show_row_totals" optional="hide"/>
+                                <field name="pivot_show_col_totals" optional="hide"/>
+                                <field name="show_data_title" optional="hide"/>
+                                <field name="show_record_count" optional="hide"/>
+                                <field name="limit" optional="hide"/>
+                                <field name="list_groupby" optional="hide"/>
+                            </tree>
+                        </field>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Vue tree simple pour les lignes du tableau de bord -->
+    <record id="view_is_tableau_de_bord_line_tree_simple" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.line.tree.simple</field>
+        <field name="model">is.tableau.de.bord.line</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Vue formulaire dédiée pour l'édition de ligne depuis le dashboard -->
+    <record id="view_is_tableau_de_bord_line_edit_form" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.line.edit.form</field>
+        <field name="model">is.tableau.de.bord.line</field>
+        <field name="priority" eval="10"/>
+        <field name="arch" type="xml">
+            <form string="Modification de la ligne du tableau de bord">
+                <sheet>
+                    <group>
+                        <group string="Sélection du filtre">
+                            <field name="model_ids" widget="many2many_tags" invisible="1"/>
+                            <field name="model_id" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', model_ids)]"/>
+                            <field name="model_name" invisible="1"/>
+                            <field name="user_id" options="{'no_create': True}"/>
+                            <field name="filter_domain" invisible="1"/>
+                            <field name="filter_id" options="{'no_create': True}" domain="[('user_id', '!=', False), ('model_id', '=', model_name), ('user_id', '=', user_id)]"/>
+                        </group>
+                        <group string="Affichage">
+                            <field name="name"/>
+                            <field name="sequence"/>
+                            <field name="width"/>
+                            <field name="height"/>
+                        </group>
+                    </group>
+                    <group string="Configuration de l'affichage">
+                        <field name="display_mode"/>
+                        <field name="limit"/>
+                    </group>
+                    <group attrs="{'invisible': [('display_mode', '!=', 'graph')]}">
+                        <group>
+                            <field name="graph_chart_type"/>
+                            <field name="graph_show_legend"/>
+                            <field name="show_data_title"/>
+                            <field name="pivot_sort_by"/>
+                            <field name="pivot_sort_order"/>
+                        </group>
+                        <group string="Paramètres techniques">
+                            <field name="graph_measure" readonly="1" force_save="1"/>
+                            <field name="graph_groupbys" readonly="1" force_save="1"/>
+                        </group>
+                    </group>
+                    <group attrs="{'invisible': [('display_mode', '!=', 'pivot')]}">
+                        <group string="Options du tableau croisé">
+                            <field name="show_data_title"/>
+                            <field name="pivot_sort_by"/>
+                            <field name="pivot_sort_order"/>
+                            <field name="pivot_show_row_totals"/>
+                            <field name="pivot_show_col_totals"/>
+                        </group>
+                        <group string="Paramètres techniques">
+                            <field name="pivot_row_groupby" readonly="1" force_save="1"/>
+                            <field name="pivot_col_groupby" readonly="1" force_save="1"/>
+                            <field name="pivot_measure" readonly="1" force_save="1"/>
+                        </group>
+                    </group>
+                    <group attrs="{'invisible': [('display_mode', '!=', 'list')]}">
+                        <field name="show_record_count"/>
+                        <field name="list_groupby" help="Champs de regroupement séparés par des virgules (ex: secteur_id,partner_id). Si défini, affiche une ligne par regroupement avec les totaux des champs numériques."/>
+                    </group>
+                    <group attrs="{'invisible': [('display_mode', '!=', 'list')]}">
+                        <field name="field_ids">
+                            <tree editable="bottom" limit="500">
+                                <field name="sequence" widget="handle"/>
+                                <field name="field_label" string="Champ"/>
+                                <field name="field_name" invisible="1"/>
+                                <field name="visible" widget="boolean_toggle"/>
+                                <field name="sort_order" string="Ordre de tri"/>
+                                <field name="sort_direction" string="Sens"/>
+                            </tree>
+                        </field>
+                        <div class="mt-2">
+                            <button name="action_load_all_model_fields" 
+                                    string="Charger tous les champs du modèle" 
+                                    type="object" 
+                                    class="btn-secondary"
+                                    help="Remplace les champs actuels par tous les champs disponibles dans le modèle (hors champs techniques)"/>
+                        </div>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Vue dashboard personnalisée -->
+    <record id="view_is_tableau_de_bord_dashboard" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.dashboard</field>
+        <field name="model">is.tableau.de.bord</field>
+        <field name="priority" eval="99"/>
+        <field name="arch" type="xml">
+            <form string="Tableau de bord" class="o_dashboard_form">
+                <!-- <header>
+                    <button string="Modifier le tableau de bord" type="object" name="action_edit_dashboard" class="btn-primary" groups="is_tableau_de_bord16.group_tableau_de_bord_manager"/>
+                </header> -->
+                <div class="o_dashboard_view">
+                    <div id="dashboard_container" class="container-fluid p-0">
+                        <!-- Les éléments seront générés dynamiquement par JavaScript -->
+                    </div>
+                    <!-- Champs cachés pour accéder aux données -->
+                    <div style="display: none;">
+                        <field name="name" readonly="1"/>
+                        <field name="line_ids" readonly="1">
+                            <tree>
+                                <field name="sequence"/>
+                                <field name="name"/>
+                                <field name="model_id"/>
+                                <field name="user_id"/>
+                                <field name="filter_id"/>
+                                <field name="width"/>
+                                <field name="height"/>
+                                <field name="display_mode"/>
+                                <field name="graph_chart_type"/>
+                                <field name="graph_measure"/>
+                                <field name="graph_groupbys"/>
+                                <field name="graph_show_legend"/>
+                                <field name="show_data_title"/>
+                                <field name="pivot_row_groupby"/>
+                                <field name="pivot_col_groupby"/>
+                                <field name="pivot_measure"/>
+                                <field name="pivot_sort_by"/>
+                                <field name="pivot_sort_order"/>
+                                <field name="pivot_show_row_totals"/>
+                                <field name="pivot_show_col_totals"/>
+                                <field name="show_record_count"/>
+                                <field name="list_groupby"/>
+                            </tree>
+                        </field>
+                    </div>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action serveur pour visualiser UN tableau de bord spécifique (URL avec ID) -->
+    <record id="is_tableau_de_bord_action_view_single" model="ir.actions.server">
+        <field name="name">Visualiser le tableau de bord</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="state">code</field>
+        <field name="code">
+if env.context.get('active_id'):
+    action = model.browse(env.context.get('active_id')).action_view_dashboard()
+elif env.context.get('active_ids'):
+    action = model.browse(env.context.get('active_ids')[0]).action_view_dashboard()
+else:
+    action = model.action_view_dashboard_list()
+        </field>
+    </record>
+
+    <!-- Vue liste du tableau de bord -->
+    <record id="view_is_tableau_de_bord_list_view" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.list</field>
+        <field name="model">is.tableau.de.bord</field>
+        <field name="arch" type="xml">
+            <tree string="Tableaux de bord">
+                <button name="%(is_tableau_de_bord_action_view_single)d" string="Voir" type="action" icon="fa-eye"/>
+                <field name="name"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Vue kanban pour l'affichage des tableaux de bord -->
+    <record id="view_is_tableau_de_bord_kanban_view" model="ir.ui.view">
+        <field name="name">is.tableau.de.bord.kanban</field>
+        <field name="model">is.tableau.de.bord</field>
+        <field name="arch" type="xml">
+            <kanban string="Tableaux de bord" class="o_kanban_dashboard" create="false" action="action_view_dashboard" type="object">
+                <field name="id"/>
+                <field name="name"/>
+                <field name="description"/>
+                <field name="color"/>
+                <field name="image"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_global_click oe_kanban_color_#{kanban_getcolor(record.color.raw_value)} oe_kanban_card">
+                            <div class="o_kanban_record_top p-2 mb-2 d-flex justify-content-center position-relative">
+                                <div class="o_kanban_record_headings w-100 text-center">
+                                    <strong class="o_kanban_record_title">
+                                        <field name="name"/>
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_body text-center">
+                                <t t-if="record.image.raw_value">
+                                    <field name="image" widget="image" options="{'size': [128, 128]}" class="mb-2"/>
+                                </t>
+                                <t t-if="record.description.raw_value">
+                                    <div class="text-muted" style="white-space: pre-line;">
+                                        <field name="description"/>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Action act_window pour CONFIGURER un tableau de bord (vue formulaire normale) -->
+    <record id="is_tableau_de_bord_action_edit" model="ir.actions.act_window">
+        <field name="name">Configurer le tableau de bord</field>
+        <field name="res_model">is.tableau.de.bord</field>
+        <field name="view_mode">form</field>
+        <field name="target">main</field>
+        <field name="view_id" ref="view_is_tableau_de_bord_form_view"/>
+    </record>
+
+    <!-- Action act_window pour VISUALISER un tableau de bord (vue dashboard) -->
+    <record id="is_tableau_de_bord_action_view_single_window" model="ir.actions.act_window">
+        <field name="name">Visualiser le tableau de bord</field>
+        <field name="res_model">is.tableau.de.bord</field>
+        <field name="view_mode">form</field>
+        <field name="target">main</field>
+        <field name="context">{'dashboard_mode': True}</field>
+        <field name="view_id" ref="view_is_tableau_de_bord_dashboard"/>
+    </record>
+
+    <!-- Action serveur pour visualiser les tableaux de bord (URL spécifique) -->
+    <record id="is_tableau_de_bord_action_view" model="ir.actions.server">
+        <field name="name">Visualiser les tableaux de bord</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_view_dashboard_list()</field>
+    </record>
+
+    <!-- Menu pour accéder directement aux tableaux de bord en mode visualisation -->
+    <!-- <menuitem id="is_tableau_de_bord_menu_view"
+              name="Voir les tableaux de bord"
+              action="is_tableau_de_bord_action_view"
+              groups="group_tableau_de_bord_user"
+              sequence="497"/> -->
+
+    <!-- Action serveur qui appelle la méthode Python pour retourner la bonne action -->
+    <record id="is_tableau_de_bord_actions_server" model="ir.actions.server">
+        <field name="name">Mes tableaux de bord</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_view_types">form</field>
+
+
+        <field name="state">code</field>
+        <field name="code">action = model.sudo().action_open_tableaux_de_bord()</field>
+    </record>
+
+    <!-- Action serveur pour modifier le tableau de bord depuis le menu Actions -->
+    <record id="action_server_edit_tableau_de_bord" model="ir.actions.server">
+        <field name="name">Modifier le tableau de bord</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_view_types">form</field>
+        <field name="groups_id" eval="[(4, ref('group_tableau_de_bord_manager'))]"/>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_edit_dashboard()
+        </field>
+    </record>
+
+    <!-- Action serveur pour rafraîchir les paramètres depuis le filtre (pour les lignes) -->
+    <record id="action_server_refresh_from_filter" model="ir.actions.server">
+        <field name="name">Rafraîchir depuis le filtre</field>
+        <field name="model_id" ref="model_is_tableau_de_bord_line"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord_line"/>
+        <field name="binding_view_types">form,list</field>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_refresh_from_filter()
+        </field>
+    </record>
+
+    <!-- Action serveur pour rafraîchir toutes les lignes d'un tableau de bord -->
+    <record id="action_server_refresh_all_lines" model="ir.actions.server">
+        <field name="name">Rafraîchir toutes les lignes depuis les filtres</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_view_types">form</field>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_refresh_all_lines_from_filters()
+        </field>
+    </record>
+
+    <!-- Action pour visualiser les tableaux de bord en mode kanban -->
+    <record id="is_tableau_de_bord_action_view_kanban" model="ir.actions.act_window">
+        <field name="name">Mes tableaux de bord</field>
+        <field name="res_model">is.tableau.de.bord</field>
+        <field name="view_mode">kanban,form</field>
+        <field name="domain">[('active', '=', True)]</field>
+        <field name="context">{'dashboard_mode': True}</field>
+        <field name="views" eval="[
+            (ref('view_is_tableau_de_bord_kanban_view'), 'kanban'),
+            (ref('view_is_tableau_de_bord_dashboard'), 'form')
+        ]"/>
+    </record>
+
+    <!-- Action pour configurer les tableaux de bord (avec vue formulaire normale) -->
+    <record id="is_tableau_de_bord_action_config" model="ir.actions.act_window">
+        <field name="name">Configurer les tableaux de bord</field>
+        <field name="res_model">is.tableau.de.bord</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('active', '=', True)]</field>
+        <field name="context">{'default_active': True}</field>
+        <field name="views" eval="[
+            (ref('view_is_tableau_de_bord_list_view'), 'list'),
+            (ref('view_is_tableau_de_bord_form_view'), 'form')
+        ]"/>
+    </record>
+
+    <!-- Menu pour visualiser les tableaux de bord -->
+    <record id="is_tableau_de_bord_actions_server" model="ir.actions.server">
+        <field name="name">Tableaux de bord</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="binding_model_id" ref="model_is_tableau_de_bord"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_tableaux_de_bord()</field>
+    </record>
+    
+    <!-- Menu racine -->
+    <menuitem id="is_tableau_de_bord_menu_root"
+              name="Tableaux de bord"
+              groups="group_tableau_de_bord_user"
+              sequence="499"/>
+    
+    <!-- Sous-menu pour visualiser (vue kanban) -->
+    <menuitem id="is_tableau_de_bord_menu"
+              name="Mes tableaux de bord"
+              parent="is_tableau_de_bord_menu_root"
+              action="is_tableau_de_bord_action_view_kanban"
+              groups="group_tableau_de_bord_user"
+              sequence="10"/>
+
+    <!-- Menu de configuration pour les gestionnaires -->
+    <menuitem id="is_tableau_de_bord_menu_config"
+              name="Configuration"
+              parent="is_tableau_de_bord_menu_root"
+              action="is_tableau_de_bord_action_config"
+              groups="group_tableau_de_bord_manager"
+              sequence="20"/>
+
+
+</odoo>
