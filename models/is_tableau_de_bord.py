@@ -98,7 +98,29 @@ class IsTableauDeBord(models.Model):
                 if extracted:
                     line.write(extracted)
                     updated_count += 1
+    
+    def copy(self, default=None):
+        """Surcharge de la méthode copy pour corriger les références des filtres lors de la duplication"""
+        # Créer le tableau de bord dupliqué avec la méthode standard
+        new_dashboard = super(IsTableauDeBord, self).copy(default=default)
         
+        # Créer un mapping entre anciens et nouveaux filter_def_id
+        # L'ordre est préservé car les One2many sont copiés dans l'ordre
+        old_to_new_filter_map = {}
+        for old_filter, new_filter in zip(self.filter_def_ids, new_dashboard.filter_def_ids):
+            old_to_new_filter_map[old_filter.id] = new_filter.id
+        
+        # Mettre à jour les line_filter_ids de chaque ligne pour pointer vers les nouveaux filtres
+        for line in new_dashboard.line_ids:
+            for line_filter in line.line_filter_ids:
+                old_filter_def_id = line_filter.filter_def_id.id
+                if old_filter_def_id in old_to_new_filter_map:
+                    # Mettre à jour la référence vers le nouveau filtre
+                    line_filter.write({
+                        'filter_def_id': old_to_new_filter_map[old_filter_def_id]
+                    })
+        
+        return new_dashboard
 
 
 class IsTableauDeBordLine(models.Model):
