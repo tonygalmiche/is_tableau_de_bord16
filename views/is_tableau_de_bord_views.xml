@@ -22,37 +22,53 @@
                             <field name="image" widget="image" class="oe_avatar"/>
                         </group>
                     </group>
-                    <group string="Éléments du tableau de bord">
-                        <field name="line_ids" context="{'form_view_ref': 'is_tableau_de_bord16.view_is_tableau_de_bord_line_edit_form'}">
-                            <tree>
-                                <field name="sequence" widget="handle"/>
-                                <button name="action_open_filter" type="object" icon="fa-eye"    title="Ouvrir en plein écran" attrs="{'invisible': [('filter_id', '=', False)]}"/>
-                                <button name="action_edit_filter" type="object" icon="fa-search" title="Ouvrir le filtre"      attrs="{'invisible': [('filter_id', '=', False)]}"/>
-                                <button name="action_duplicate_line" type="object" icon="fa-copy" title="Dupliquer cette ligne"/>
-                                <field name="name"/>
-                                <field name="model_id" optional="show"/>
-                                <field name="user_id" optional="hide"/>
-                                <field name="filter_id" optional="hide"/>
-                                <field name="width" optional="show"/>
-                                <field name="height" optional="show"/>
-                                <field name="display_mode" optional="show"/>
-                                <field name="graph_chart_type" optional="hide"/>
-                                <field name="graph_aggregator" optional="hide"/>
-                                <field name="graph_show_legend" optional="hide"/>
-                                <field name="pivot_row_groupby" optional="hide"/>
-                                <field name="pivot_col_groupby" optional="hide"/>
-                                <field name="pivot_measure" optional="hide"/>
-                                <field name="pivot_sort_by" optional="hide"/>
-                                <field name="pivot_sort_order" optional="hide"/>
-                                <field name="pivot_show_row_totals" optional="hide"/>
-                                <field name="pivot_show_col_totals" optional="hide"/>
-                                <field name="show_data_title" optional="hide"/>
-                                <field name="show_record_count" optional="hide"/>
-                                <field name="limit" optional="hide"/>
-                                <field name="list_groupby" optional="hide"/>
-                            </tree>
-                        </field>
-                    </group>
+                    <notebook>
+                        <page string="Éléments du tableau de bord">
+                            <field name="line_ids" context="{'form_view_ref': 'is_tableau_de_bord16.view_is_tableau_de_bord_line_edit_form'}">
+                                <tree>
+                                    <field name="sequence" widget="handle"/>
+                                    <button name="action_open_filter" type="object" icon="fa-eye"    title="Ouvrir en plein écran" attrs="{'invisible': [('filter_id', '=', False)]}"/>
+                                    <button name="action_edit_filter" type="object" icon="fa-search" title="Ouvrir le filtre"      attrs="{'invisible': [('filter_id', '=', False)]}"/>
+                                    <button name="action_duplicate_line" type="object" icon="fa-copy" title="Dupliquer cette ligne"/>
+                                    <field name="name"/>
+                                    <field name="model_id" optional="show"/>
+                                    <field name="user_id" optional="hide"/>
+                                    <field name="filter_id" optional="hide"/>
+                                    <field name="width" optional="show"/>
+                                    <field name="height" optional="show"/>
+                                    <field name="display_mode" optional="show"/>
+                                    <field name="graph_chart_type" optional="hide"/>
+                                    <field name="graph_aggregator" optional="hide"/>
+                                    <field name="graph_show_legend" optional="hide"/>
+                                    <field name="pivot_row_groupby" optional="hide"/>
+                                    <field name="pivot_col_groupby" optional="hide"/>
+                                    <field name="pivot_measure" optional="hide"/>
+                                    <field name="pivot_sort_by" optional="hide"/>
+                                    <field name="pivot_sort_order" optional="hide"/>
+                                    <field name="pivot_show_row_totals" optional="hide"/>
+                                    <field name="pivot_show_col_totals" optional="hide"/>
+                                    <field name="show_data_title" optional="hide"/>
+                                    <field name="show_record_count" optional="hide"/>
+                                    <field name="limit" optional="hide"/>
+                                    <field name="list_groupby" optional="hide"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="Définition des filtres">
+                            <field name="filter_def_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="filter_type"/>
+                                </tree>
+                            </field>
+                        </page>
+
+
+
+
+                    </notebook>
                 </sheet>
             </form>
         </field>
@@ -79,13 +95,13 @@
                 <sheet>
                     <group>
                         <group string="Sélection du filtre">
+                            <field name="tableau_id" invisible="1"/>
                             <field name="model_ids" widget="many2many_tags" invisible="1"/>
                             <field name="model_id" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', model_ids)]"/>
                             <field name="model_name" invisible="1"/>
                             <field name="user_id" options="{'no_create': True}"/>
                             <field name="filter_domain" invisible="1"/>
                             <field name="filter_id" options="{'no_create': True}" domain="[('user_id', '!=', False), ('model_id', '=', model_name), ('user_id', '=', user_id)]"/>
-                            <field name="filter_field_id" options="{'no_create': True, 'no_open': True}"/>
                         </group>
                         <group string="Affichage">
                             <field name="name"/>
@@ -93,6 +109,15 @@
                             <field name="width"/>
                             <field name="height"/>
                         </group>
+                    </group>
+                    <group string="Association des filtres">
+                        <field name="line_filter_ids">
+                            <tree editable="bottom">
+                                <field name="sequence" widget="handle"/>
+                                <field name="filter_def_id" options="{'no_create': True}"/>
+                                <field name="field_id" options="{'no_create': True, 'no_open': True}"/>
+                            </tree>
+                        </field>
                     </group>
                     <group string="Configuration de l'affichage">
                         <field name="display_mode"/>
@@ -161,15 +186,8 @@
         <field name="arch" type="xml">
             <form string="Tableau de bord" class="o_dashboard_form" style="padding-top: 0 !important;">
                 <div class="o_dashboard_filter_container p-2 bg-light border-bottom">
-                    <div class="row align-items-center">
-                        <div class="col-md-4">
-                            <span class="fw-bold me-2">Filtre :</span>
-                            <input type="text" 
-                                   id="dashboard_filter_input" 
-                                   class="o_input form-control d-inline-block" 
-                                   placeholder="Saisissez un texte pour filtrer les données..." 
-                                   style="width: 300px;"/>
-                        </div>
+                    <div id="dashboard_filters_container" class="row g-2">
+                        <!-- Les filtres seront générés dynamiquement par JavaScript -->
                     </div>
                 </div>
                 <div class="o_dashboard_view">
@@ -179,6 +197,13 @@
                     <!-- Champs cachés pour accéder aux données -->
                     <div style="display: none;">
                         <field name="name" readonly="1"/>
+                        <field name="filter_def_ids" readonly="1">
+                            <tree>
+                                <field name="sequence"/>
+                                <field name="name"/>
+                                <field name="filter_type"/>
+                            </tree>
+                        </field>
                         <field name="line_ids" readonly="1">
                             <tree>
                                 <field name="sequence"/>
@@ -186,7 +211,12 @@
                                 <field name="model_id"/>
                                 <field name="user_id"/>
                                 <field name="filter_id"/>
-                                <field name="filter_field_id"/>
+                                <field name="line_filter_ids">
+                                    <tree>
+                                        <field name="filter_def_id"/>
+                                        <field name="field_id"/>
+                                    </tree>
+                                </field>
                                 <field name="width"/>
                                 <field name="height"/>
                                 <field name="display_mode"/>
@@ -440,6 +470,7 @@ action = records.action_refresh_all_lines_from_filters()
         <field name="arch" type="xml">
             <tree string="Filtres mémorisés">
                 <field name="tableau_id"/>
+                <field name="filter_def_id"/>
                 <field name="user_id"/>
                 <field name="filter_value"/>
             </tree>
@@ -454,6 +485,7 @@ action = records.action_refresh_all_lines_from_filters()
                 <sheet>
                     <group>
                         <field name="tableau_id"/>
+                        <field name="filter_def_id"/>
                         <field name="user_id"/>
                         <field name="filter_value"/>
                     </group>

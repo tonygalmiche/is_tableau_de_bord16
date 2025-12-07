@@ -26,50 +26,12 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         this._super();
         this.rpc = useService("rpc");
         this.actionService = useService("action");
-        this.currentFilterValue = '';
         
         onMounted(() => {
             if (this._isDashboardMode()) {
                 this._setupDashboard();
-                this._setupFilterListener();
             }
         });
-    },
-
-    _setupFilterListener() {
-        setTimeout(() => {
-            const filterInput = document.getElementById('dashboard_filter_input');
-            if (filterInput) {
-                // Appliquer la valeur mémorisée à l'input
-                if (this.currentFilterValue) {
-                    filterInput.value = this.currentFilterValue;
-                }
-                
-                filterInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        this.currentFilterValue = e.target.value;
-                        // Sauvegarder le filtre pour cet utilisateur
-                        this._saveFilter(this.currentFilterValue);
-                        // Recharger les données
-                        this._loadDashboardItems();
-                    }
-                });
-            }
-        }, 500);
-    },
-
-    async _saveFilter(filterValue) {
-        const dashboardId = this.model?.root?.resId;
-        if (!dashboardId) return;
-        
-        try {
-            await this.rpc("/tableau_de_bord/save_filter", {
-                dashboard_id: dashboardId,
-                filter_value: filterValue
-            });
-        } catch (error) {
-            // Ignorer les erreurs silencieusement
-        }
     },
 
     _isDashboardMode() {
@@ -102,6 +64,9 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         // Vérifier si l'utilisateur est gestionnaire
         await this._checkUserPermissions();
         
+        // Créer les inputs de filtres
+        this._createFilterInputs();
+        
         // Charger le filtre mémorisé pour cet utilisateur
         await this._loadSavedFilter();
         
@@ -112,20 +77,229 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         }, 1500);
     },
 
+    _createFilterInputs() {
+        const record = this.model.root;
+        const filterDefs = record?.data?.filter_def_ids?.records || [];
+        
+        const container = document.getElementById('dashboard_filters_container');
+        if (!container || filterDefs.length === 0) {
+            return;
+        }
+
+        let html = '';
+        
+        for (const filterDefRecord of filterDefs) {
+            const filterDef = filterDefRecord.data;
+            const filterId = filterDefRecord.resId || filterDef.id;
+            const filterName = filterDef.name || 'Filtre';
+            const filterType = filterDef.filter_type || 'text';
+            
+            const inputType = filterType === 'date' ? 'text' : 'text';
+            let placeholder = '';
+            let helpContent = '';
+            
+            if (filterType === 'date') {
+                placeholder = 'AAAA, >2025, 2024-01 OU 2024-03...';
+                helpContent = `
+                    <div style="text-align: left; line-height: 1.6;">
+                        <strong style="color: #0066cc; font-size: 1.1em;">📅 FILTRES DE DATE</strong>
+                        <hr style="margin: 8px 0;">
+                        
+                        <strong>🔹 Formats de base :</strong><br>
+                        &nbsp;&nbsp;• <code>AAAA</code> : Année complète (ex: 2025)<br>
+                        &nbsp;&nbsp;• <code>AAAA-MM</code> : Mois (ex: 2025-03)<br>
+                        &nbsp;&nbsp;• <code>AAAA-SXX</code> : Semaine (ex: 2025-S15)<br>
+                        &nbsp;&nbsp;• <code>JJ/MM/AAAA</code> : Date exacte (ex: 07/12/2025)<br>
+                        &nbsp;&nbsp;• <code>AAAA-MM-JJ</code> : Date ISO (ex: 2025-12-07)<br><br>
+                        
+                        <strong>🔹 Opérateurs de comparaison :</strong><br>
+                        &nbsp;&nbsp;• <code>&gt;2025</code> : Après 2025<br>
+                        &nbsp;&nbsp;• <code>&gt;=2025-03</code> : À partir de Mars 2025<br>
+                        &nbsp;&nbsp;• <code>&lt;2025</code> : Avant 2025<br>
+                        &nbsp;&nbsp;• <code>&lt;=2025-06</code> : Jusqu'à Juin 2025<br><br>
+                        
+                        <strong>🔹 Opérateurs logiques :</strong><br>
+                        &nbsp;&nbsp;• <code>2024-01, 2024-03</code> : Janvier <strong>OU</strong> Mars 2024<br>
+                        &nbsp;&nbsp;• <code>2024-01 OU 2024-03</code> : Même résultat<br>
+                        &nbsp;&nbsp;• <code>&gt;2024-01 ET &lt;2024-06</code> : Entre Fév et Mai 2024
+                    </div>
+                `;
+            } else {
+                placeholder = 'abc, abc*, >100, toto ET tutu...';
+                helpContent = `
+                    <div style="text-align: left; line-height: 1.6;">
+                        <strong style="color: #0066cc; font-size: 1.1em;">🔍 FILTRES DE TEXTE</strong>
+                        <hr style="margin: 8px 0;">
+                        
+                        <strong>🔹 Wildcards (*) :</strong><br>
+                        &nbsp;&nbsp;• <code>abc</code> : Contient "abc"<br>
+                        &nbsp;&nbsp;• <code>abc*</code> : Commence par "abc"<br>
+                        &nbsp;&nbsp;• <code>*abc</code> : Se termine par "abc"<br>
+                        &nbsp;&nbsp;• <code>abc*xyz</code> : Commence par "abc" et finit par "xyz"<br><br>
+                        
+                        <strong>🔹 Opérateurs logiques :</strong><br>
+                        &nbsp;&nbsp;• <code>toto, tutu</code> : Contient "toto" <strong>OU</strong> "tutu"<br>
+                        &nbsp;&nbsp;• <code>toto OU tutu</code> : Même résultat<br>
+                        &nbsp;&nbsp;• <code>toto ET tutu</code> : Contient "toto" <strong>ET</strong> "tutu"<br><br>
+                        
+                        <strong>🔹 Champs numériques :</strong><br>
+                        &nbsp;&nbsp;• <code>100</code> : Égal à 100<br>
+                        &nbsp;&nbsp;• <code>&gt;100</code>, <code>&gt;=100</code>, <code>&lt;100</code>, <code>&lt;=100</code><br>
+                        &nbsp;&nbsp;• <code>&gt;100 ET &lt;200</code> : Entre 100 et 200<br>
+                        &nbsp;&nbsp;• <code>10, 20, 30</code> : Égal à 10 <strong>OU</strong> 20 <strong>OU</strong> 30<br><br>
+                        
+                        <strong>🔹 Champs booléens :</strong><br>
+                        &nbsp;&nbsp;• <code>1, true, vrai, yes, oui</code> : VRAI<br>
+                        &nbsp;&nbsp;• <code>0, false, faux, no, non</code> : FAUX
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="col-md-3">
+                    <label class="form-label">
+                        ${filterName}
+                        <i class="fa fa-info-circle text-primary filter-help-icon" 
+                           data-filter-id="${filterId}"
+                           data-help-content="${helpContent.replace(/"/g, '&quot;')}"
+                           title="Cliquez pour voir l'aide détaillée"
+                           style="cursor: pointer; font-size: 0.9em;"></i>
+                    </label>
+                    <input type="${inputType}" 
+                           class="form-control dashboard-filter-input" 
+                           id="dashboard_filter_${filterId}"
+                           data-filter-id="${filterId}"
+                           data-filter-type="${filterType}"
+                           placeholder="${placeholder}">
+                </div>
+            `;
+        }
+        
+        html += `
+            <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" id="apply_filters_btn">
+                    <i class="fa fa-search"></i> Appliquer les filtres
+                </button>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // Attacher les événements
+        setTimeout(() => {
+            // Gérer les clics sur les icônes d'aide
+            document.querySelectorAll('.filter-help-icon').forEach(icon => {
+                icon.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._showFilterHelp(icon);
+                });
+            });
+            
+            // Event sur les inputs (touche Enter)
+            document.querySelectorAll('.dashboard-filter-input').forEach(input => {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this._applyFilters();
+                    }
+                });
+            });
+            
+            // Event sur le bouton
+            const applyBtn = document.getElementById('apply_filters_btn');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    this._applyFilters();
+                });
+            }
+        }, 100);
+    },
+
+    _showFilterHelp(icon) {
+        // Supprimer toute popup existante
+        const existingPopup = document.querySelector('.filter-help-popup');
+        if (existingPopup) {
+            existingPopup.remove();
+        }
+        
+        const helpContent = icon.dataset.helpContent;
+        
+        // Créer la popup
+        const popup = document.createElement('div');
+        popup.className = 'filter-help-popup';
+        popup.innerHTML = `
+            <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;" class="filter-help-backdrop">
+                <div style="background: white; padding: 20px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); position: relative;">
+                    <button style="position: absolute; top: 10px; right: 10px; border: none; background: none; font-size: 24px; cursor: pointer; color: #666;" class="filter-help-close">&times;</button>
+                    ${helpContent}
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(popup);
+        
+        // Fermer au clic sur le backdrop ou le bouton X
+        popup.querySelector('.filter-help-backdrop').addEventListener('click', (e) => {
+            if (e.target.classList.contains('filter-help-backdrop') || e.target.classList.contains('filter-help-close')) {
+                popup.remove();
+            }
+        });
+        
+        // Fermer avec Escape
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                popup.remove();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+    },
+
+    _applyFilters() {
+        // Collecter toutes les valeurs de filtres (y compris les vides pour les supprimer)
+        const filtersDict = {};
+        document.querySelectorAll('.dashboard-filter-input').forEach(input => {
+            const filterId = input.dataset.filterId;
+            const value = input.value.trim();
+            // Toujours ajouter au dictionnaire, même si vide (pour supprimer en base)
+            filtersDict[filterId] = value;
+        });
+        
+        // Sauvegarder les filtres
+        this._saveFilter(filtersDict);
+        
+        // Recharger les données
+        this._loadDashboardItems();
+    },
+
     async _loadSavedFilter() {
         const dashboardId = this.model?.root?.resId;
         if (!dashboardId) return;
         
         try {
             const result = await this.rpc("/tableau_de_bord/get_saved_filter/" + dashboardId);
-            if (result && result.filter_value) {
-                this.currentFilterValue = result.filter_value;
-                // Mettre à jour l'input si il existe déjà
-                const filterInput = document.getElementById('dashboard_filter_input');
-                if (filterInput) {
-                    filterInput.value = result.filter_value;
+            if (result && result.filters) {
+                // Peupler les inputs avec les valeurs sauvegardées
+                for (const [filterId, value] of Object.entries(result.filters)) {
+                    const input = document.getElementById(`dashboard_filter_${filterId}`);
+                    if (input) {
+                        input.value = value;
+                    }
                 }
             }
+        } catch (error) {
+            // Ignorer les erreurs silencieusement
+        }
+    },
+
+    async _saveFilter(filtersDict) {
+        const dashboardId = this.model?.root?.resId;
+        if (!dashboardId) return;
+        
+        try {
+            await this.rpc("/tableau_de_bord/save_filter", {
+                dashboard_id: dashboardId,
+                filters_dict: filtersDict
+            });
         } catch (error) {
             // Ignorer les erreurs silencieusement
         }
@@ -362,12 +536,22 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         try {
             const lid = backendLineId || lineId;
             const dashboardId = this.model?.root?.resId;
-            const filterValue = this.currentFilterValue || '';
+            
+            // Collecter toutes les valeurs de filtres
+            const filtersValues = {};
+            document.querySelectorAll('.dashboard-filter-input').forEach(input => {
+                const filterDefId = input.dataset.filterId;
+                const value = input.value.trim();
+                if (value) {
+                    filtersValues[filterDefId] = value;
+                }
+            });
+            
             const data = await this.rpc("/tableau_de_bord/get_filter_data/" + filterId, { 
                 line_id: lid, 
                 overrides, 
                 dashboard_id: dashboardId,
-                filter_value: filterValue
+                filters_values: filtersValues
             });
             this._renderFilterData(lineId, data);
         } catch (error) {

@@ -12,6 +12,7 @@ class IsTableauDeBord(models.Model):
     name = fields.Char('Nom du tableau de bord', required=True)
     description = fields.Text('Description')
     line_ids = fields.One2many('is.tableau.de.bord.line', 'tableau_id', copy=True, string='Lignes du tableau de bord')
+    filter_def_ids = fields.One2many('is.tableau.de.bord.filter.def', 'tableau_id', copy=True, string='Définition des filtres')
     active = fields.Boolean('Actif', default=True)
     color = fields.Integer('Couleur', default=lambda self: random.randint(1, 11))
     image = fields.Binary('Image', attachment=True)
@@ -114,7 +115,7 @@ class IsTableauDeBordLine(models.Model):
     model_name = fields.Char(related='model_id.model', string='Nom technique du modèle', store=False)
     user_id = fields.Many2one('res.users', string='Utilisateur', default=lambda self: self.env.user, help='Filtrer les recherches par utilisateur (laisser vide pour voir toutes les recherches)')
     filter_id = fields.Many2one('ir.filters', string='Recherche enregistrée')
-    filter_field_id = fields.Many2one('ir.model.fields', string='Champ à filtrer', help='Champ du modèle sur lequel appliquer le filtre saisi par l\'utilisateur', domain="[('model_id', '=', model_id), ('ttype', 'in', ['char', 'text', 'many2one'])]")
+    line_filter_ids = fields.One2many('is.tableau.de.bord.line.filter', 'line_id', copy=True, string='Filtres de la ligne')
     
     # Configuration de l'affichage
     width = fields.Selection([
@@ -781,51 +782,95 @@ class IsTableauDeBordLineField(models.Model):
                 record.field_label = record.field_name
 
 
+class IsTableauDeBordFilterDef(models.Model):
+    _name = 'is.tableau.de.bord.filter.def'
+    _description = 'Définition des filtres du tableau de bord'
+    _order = 'sequence, id'
+
+    tableau_id = fields.Many2one('is.tableau.de.bord', string='Tableau de bord', required=True, ondelete='cascade')
+    sequence = fields.Integer('Séquence', default=10)
+    name = fields.Char('Nom du filtre', required=True, help='Ex: Année, Moule, Client...')
+    filter_type = fields.Selection([
+        ('text', 'Texte'),
+        ('date', 'Date'),
+    ], string='Type de données', required=True, default='text')
+
+
+class IsTableauDeBordLineFilter(models.Model):
+    _name = 'is.tableau.de.bord.line.filter'
+    _description = 'Association filtre/champ pour une ligne de tableau de bord'
+    _order = 'sequence, id'
+
+    line_id = fields.Many2one('is.tableau.de.bord.line', string='Ligne', required=True, ondelete='cascade')
+    sequence = fields.Integer('Séquence', default=10)
+    filter_def_id = fields.Many2one('is.tableau.de.bord.filter.def', string='Filtre', required=True, 
+                                     domain="[('tableau_id', '=', parent.tableau_id)]")
+    field_id = fields.Many2one('ir.model.fields', string='Champ du modèle', required=True, ondelete='cascade',
+                                domain="[('model_id', '=', parent.model_id)]")
+
+
 class IsTableauDeBordMemFilter(models.Model):
     _name = 'is.tableau.de.bord.mem.filter'
     _description = 'Mémorisation des filtres du tableau de bord'
     _rec_name = 'tableau_id'
 
     tableau_id = fields.Many2one('is.tableau.de.bord', string='Tableau de bord', required=True, ondelete='cascade', index=True)
+    filter_def_id = fields.Many2one('is.tableau.de.bord.filter.def', string='Filtre', required=True, ondelete='cascade', index=True)
     user_id = fields.Many2one('res.users', string='Utilisateur', required=True, ondelete='cascade', index=True, default=lambda self: self.env.user)
     filter_value = fields.Char('Valeur du filtre', help='Dernière valeur du filtre saisie par l\'utilisateur')
     
     _sql_constraints = [
-        ('unique_tableau_user', 'UNIQUE(tableau_id, user_id)', 'Un seul enregistrement par tableau et par utilisateur !'),
+        ('unique_tableau_filter_user', 'UNIQUE(tableau_id, filter_def_id, user_id)', 'Un seul enregistrement par tableau, filtre et utilisateur !'),
     ]
 
     @api.model
-    def save_filter(self, tableau_id, filter_value):
-        """Enregistre ou met à jour le filtre pour l'utilisateur courant"""
-        if not tableau_id:
+    def save_filters(self, tableau_id, filters_dict):
+        """Enregistre ou met à jour les filtres pour l'utilisateur courant
+        filters_dict = {filter_def_id: filter_value, ...}
+        Si filter_value est vide, supprime l'enregistrement
+        """
+        if not tableau_id or not filters_dict:
             return False
         
-        # Chercher si un enregistrement existe déjà
-        existing = self.search([
-            ('tableau_id', '=', tableau_id),
-            ('user_id', '=', self.env.user.id)
-        ], limit=1)
-        
-        if existing:
-            existing.filter_value = filter_value
-        else:
-            self.create({
-                'tableau_id': tableau_id,
-                'user_id': self.env.user.id,
-                'filter_value': filter_value,
-            })
+        for filter_def_id, filter_value in filters_dict.items():
+            # Convertir filter_def_id en entier (peut arriver en string depuis JSON)
+            filter_def_id = int(filter_def_id)
+            
+            existing = self.search([
+                ('tableau_id', '=', tableau_id),
+                ('filter_def_id', '=', filter_def_id),
+                ('user_id', '=', self.env.user.id)
+            ], limit=1)
+            
+            if filter_value and filter_value.strip():
+                # Valeur non vide : créer ou mettre à jour
+                if existing:
+                    existing.filter_value = filter_value
+                else:
+                    self.create({
+                        'tableau_id': tableau_id,
+                        'filter_def_id': filter_def_id,
+                        'user_id': self.env.user.id,
+                        'filter_value': filter_value,
+                    })
+            else:
+                # Valeur vide : supprimer l'enregistrement s'il existe
+                if existing:
+                    existing.unlink()
         
         return True
 
     @api.model
-    def get_filter(self, tableau_id):
-        """Récupère le dernier filtre saisi pour l'utilisateur courant"""
+    def get_filters(self, tableau_id):
+        """Récupère tous les filtres saisis pour l'utilisateur courant
+        Retourne un dictionnaire {filter_def_id: filter_value, ...}
+        """
         if not tableau_id:
-            return ''
+            return {}
         
-        record = self.search([
+        records = self.search([
             ('tableau_id', '=', tableau_id),
             ('user_id', '=', self.env.user.id)
-        ], limit=1)
+        ])
         
-        return record.filter_value if record else ''
+        return {rec.filter_def_id.id: rec.filter_value for rec in records if rec.filter_value}

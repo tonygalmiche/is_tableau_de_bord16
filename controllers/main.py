@@ -3,6 +3,8 @@
 import json
 import ast
 import logging
+import re
+from datetime import datetime, timedelta
 from odoo import http
 from odoo.http import request
 from lxml import etree
@@ -27,18 +29,257 @@ def clean_for_json(obj):
 
 class TableauDeBordController(http.Controller):
 
+    def _parse_filter_value(self, field_name, field_type, filter_value, filter_type='text'):
+        """Parse une valeur de filtre avec support des opérateurs avancés
+        
+        Syntaxe supportée:
+        - Opérateur OU: virgule ou mot-clé OU (ex: "toto, tutu" ou "toto OU tutu")
+        - Opérateur ET: mot-clé ET (ex: ">100 ET <200")
+        - Wildcards: * pour texte (ex: "abc*", "*xyz", "abc*xyz")
+        - Opérateurs numériques: >, >=, <, <=, = (ex: ">100", "<=50")
+        - Opérateurs de dates: mêmes opérateurs (ex: ">2025", "<=2025-03")
+        - Booléens: 1/0, true/false, vrai/faux, yes/no, oui/non
+        """
+        if not filter_value or not filter_value.strip():
+            return []
+        
+        filter_value = filter_value.strip()
+        
+        # Gérer l'opérateur ET en priorité (car il ne peut pas être dans une valeur)
+        if ' ET ' in filter_value.upper():
+            parts = re.split(r'\s+ET\s+', filter_value, flags=re.IGNORECASE)
+            domain = []
+            for part in parts:
+                sub_domain = self._parse_filter_value(field_name, field_type, part.strip(), filter_type)
+                domain.extend(sub_domain)
+            return domain
+        
+        # Gérer l'opérateur OU (virgule ou mot-clé OU)
+        # Pour les nombres décimaux, éviter de split sur la virgule décimale
+        or_parts = []
+        if ' OU ' in filter_value.upper():
+            or_parts = re.split(r'\s+OU\s+', filter_value, flags=re.IGNORECASE)
+        elif ',' in filter_value:
+            # Vérifier si c'est un nombre décimal ou une liste
+            if field_type in ['integer', 'float', 'monetary']:
+                # Si commence par un opérateur ou contient plusieurs virgules, c'est une liste
+                if re.match(r'^[><=]', filter_value) or filter_value.count(',') > 1:
+                    or_parts = [p.strip() for p in filter_value.split(',')]
+                else:
+                    # Sinon c'est probablement un décimal unique
+                    or_parts = [filter_value]
+            else:
+                or_parts = [p.strip() for p in filter_value.split(',')]
+        else:
+            or_parts = [filter_value]
+        
+        if len(or_parts) > 1:
+            # Créer un domaine OR
+            or_domains = []
+            for part in or_parts:
+                sub_domain = self._parse_single_filter(field_name, field_type, part.strip(), filter_type)
+                if sub_domain:
+                    or_domains.append(sub_domain)
+            
+            if len(or_domains) == 0:
+                return []
+            elif len(or_domains) == 1:
+                return or_domains[0]
+            else:
+                # Construire le domaine OR en Odoo
+                # Pour n domaines, on a besoin de (n-1) opérateurs '|'
+                result = []
+                
+                # Ajouter les opérateurs OR
+                for i in range(len(or_domains) - 1):
+                    result.append('|')
+                
+                # Ajouter chaque domaine
+                for dom in or_domains:
+                    if len(dom) == 1:
+                        # Condition simple, l'ajouter directement
+                        result.append(dom[0])
+                    elif len(dom) == 2:
+                        # Deux conditions (ex: année avec >= et <=)
+                        # Il faut les grouper avec '&'
+                        result.append('&')
+                        result.extend(dom)
+                    else:
+                        # Plus de 2 conditions, ajouter des '&' pour toutes
+                        for i in range(len(dom) - 1):
+                            result.append('&')
+                        result.extend(dom)
+                
+                return result
+        else:
+            return self._parse_single_filter(field_name, field_type, filter_value, filter_type)
+    
+    def _parse_single_filter(self, field_name, field_type, filter_value, filter_type='text'):
+        """Parse une valeur de filtre unique (sans opérateurs OU/ET)"""
+        domain = []
+        
+        try:
+            # Booléen
+            if field_type == 'boolean':
+                val_lower = filter_value.lower()
+                if val_lower in ['1', 'true', 'vrai', 'yes', 'oui']:
+                    return [(field_name, '=', True)]
+                elif val_lower in ['0', 'false', 'faux', 'no', 'non']:
+                    return [(field_name, '=', False)]
+                return []
+            
+            # Numérique (integer, float, monetary)
+            if field_type in ['integer', 'float', 'monetary']:
+                return self._parse_numeric_filter(field_name, filter_value)
+            
+            # Date
+            if field_type == 'date' and filter_type == 'date':
+                return self._parse_date_filter(field_name, filter_value)
+            
+            # Texte (char, text, many2one, selection)
+            if field_type in ['char', 'text', 'selection']:
+                return self._parse_text_filter(field_name, filter_value)
+            
+            # Many2one
+            if field_type == 'many2one':
+                return self._parse_text_filter(field_name + '.name', filter_value)
+                
+        except Exception as e:
+            print(f"Erreur parse filter: {e}")
+        
+        return domain
+    
+    def _parse_numeric_filter(self, field_name, filter_value):
+        """Parse un filtre numérique avec opérateurs"""
+        # Remplacer virgule par point pour les décimaux
+        filter_value = filter_value.replace(',', '.')
+        
+        # Détecter l'opérateur
+        match = re.match(r'^(>=?|<=?|=)?\s*(-?\d+\.?\d*)$', filter_value)
+        if match:
+            operator = match.group(1) or '='
+            value = float(match.group(2))
+            return [(field_name, operator, value)]
+        
+        return []
+    
+    def _parse_text_filter(self, field_name, filter_value):
+        """Parse un filtre texte avec wildcards"""
+        # Gérer les wildcards
+        if '*' in filter_value:
+            pattern = filter_value.replace('*', '%')
+            print(f"[TEXT FILTER] Original: '{filter_value}' => Pattern: '{pattern}'")
+            return [(field_name, 'ilike', pattern)]
+        else:
+            # Recherche contient par défaut (ajouter % des 2 côtés)
+            pattern = f'%{filter_value}%'
+            print(f"[TEXT FILTER] Original: '{filter_value}' => Pattern (contains): '{pattern}'")
+            return [(field_name, 'ilike', pattern)]
+
+    def _parse_date_filter(self, field_name, filter_value):
+        """Parse une valeur de filtre de date avec opérateurs
+        Formats supportés:
+        - AAAA : année complète
+        - AAAA-MM : mois complet  
+        - AAAA-SXX : semaine XX de l'année
+        - JJ/MM/AAAA ou AAAA-MM-JJ : date exacte
+        - Avec opérateurs: >2025, <=2025-03, etc.
+        """
+        domain = []
+        
+        # Détecter l'opérateur
+        match = re.match(r'^(>=?|<=?|=)?\s*(.+)$', filter_value.strip())
+        if not match:
+            return []
+        
+        operator = match.group(1) or '='
+        date_str = match.group(2).strip()
+        
+        try:
+            # Format année seule (AAAA)
+            if re.match(r'^\d{4}$', date_str):
+                year = int(date_str)
+                if operator == '=':
+                    domain.append((field_name, '>=', f'{year}-01-01'))
+                    domain.append((field_name, '<=', f'{year}-12-31'))
+                elif operator == '>':
+                    domain.append((field_name, '>', f'{year}-12-31'))
+                elif operator == '>=':
+                    domain.append((field_name, '>=', f'{year}-01-01'))
+                elif operator == '<':
+                    domain.append((field_name, '<', f'{year}-01-01'))
+                elif operator == '<=':
+                    domain.append((field_name, '<=', f'{year}-12-31'))
+            
+            # Format année-mois (AAAA-MM)
+            elif re.match(r'^\d{4}-\d{2}$', date_str):
+                year, month = map(int, date_str.split('-'))
+                start_date = datetime(year, month, 1)
+                if month == 12:
+                    end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+                else:
+                    end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+                
+                if operator == '=':
+                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
+                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
+                elif operator == '>':
+                    domain.append((field_name, '>', end_date.strftime('%Y-%m-%d')))
+                elif operator == '>=':
+                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
+                elif operator == '<':
+                    domain.append((field_name, '<', start_date.strftime('%Y-%m-%d')))
+                elif operator == '<=':
+                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
+            
+            # Format année-semaine (AAAA-SXX)
+            elif re.match(r'^\d{4}-S\d{2}$', date_str.upper()):
+                year_week = date_str.upper().split('-S')
+                year = int(year_week[0])
+                week = int(year_week[1])
+                jan1 = datetime(year, 1, 1)
+                start_date = jan1 + timedelta(weeks=week-1, days=-jan1.weekday())
+                end_date = start_date + timedelta(days=6)
+                
+                if operator == '=':
+                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
+                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
+                elif operator == '>':
+                    domain.append((field_name, '>', end_date.strftime('%Y-%m-%d')))
+                elif operator == '>=':
+                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
+                elif operator == '<':
+                    domain.append((field_name, '<', start_date.strftime('%Y-%m-%d')))
+                elif operator == '<=':
+                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
+            
+            # Format date complète JJ/MM/AAAA
+            elif re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
+                day, month, year = map(int, date_str.split('/'))
+                date_value = f'{year:04d}-{month:02d}-{day:02d}'
+                domain.append((field_name, operator, date_value))
+            
+            # Format date complète AAAA-MM-JJ
+            elif re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+                domain.append((field_name, operator, date_str))
+                
+        except Exception as e:
+            print(f"Erreur parse date: {e}")
+        
+        return domain
+
     @http.route('/tableau_de_bord/save_filter', type='json', auth='user')
-    def save_filter(self, dashboard_id=None, filter_value=''):
-        """Sauvegarde le filtre pour l'utilisateur courant"""
-        if dashboard_id:
-            request.env['is.tableau.de.bord.mem.filter'].save_filter(dashboard_id, filter_value)
+    def save_filter(self, dashboard_id=None, filters_dict=None):
+        """Sauvegarde les filtres pour l'utilisateur courant"""
+        if dashboard_id and filters_dict:
+            request.env['is.tableau.de.bord.mem.filter'].save_filters(dashboard_id, filters_dict)
         return {'success': True}
 
     @http.route('/tableau_de_bord/get_saved_filter/<int:dashboard_id>', type='json', auth='user')
     def get_saved_filter(self, dashboard_id):
-        """Récupère le dernier filtre saisi pour l'utilisateur courant"""
-        filter_value = request.env['is.tableau.de.bord.mem.filter'].get_filter(dashboard_id)
-        return {'filter_value': filter_value}
+        """Récupère les derniers filtres saisis pour l'utilisateur courant"""
+        filters_dict = request.env['is.tableau.de.bord.mem.filter'].get_filters(dashboard_id)
+        return {'filters': filters_dict}
 
     @http.route('/tableau_de_bord/get_filter_data/<int:filter_id>', type='json', auth='user')
     def get_filter_data(self, filter_id, line_id=None, **kwargs):
@@ -49,7 +290,13 @@ class TableauDeBordController(http.Controller):
                 line_id = kwargs.get('line_id')
             overrides = kwargs.get('overrides') or {}
             dashboard_id = kwargs.get('dashboard_id')
-            filter_value = kwargs.get('filter_value')
+            filters_values = kwargs.get('filters_values') or {}
+            
+            print(f"\n=== FILTRES REÇUS ===")
+            print(f"filter_id: {filter_id}")
+            print(f"line_id: {line_id}")
+            print(f"filters_values: {filters_values}")
+            print(f"dashboard_id: {dashboard_id}")
             
             filter_obj = request.env['ir.filters'].browse(filter_id)
             if not filter_obj.exists():
@@ -65,25 +312,43 @@ class TableauDeBordController(http.Controller):
                 except Exception:
                     domain = []
 
-            # Appliquer le filtre dynamique si défini
-            if filter_value and line_id and dashboard_id:
+            print(f"Domaine initial: {domain}")
+
+            # Appliquer les filtres dynamiques si définis
+            if filters_values and line_id:
                 try:
                     line = request.env['is.tableau.de.bord.line'].browse(int(line_id))
-                    if line and line.exists() and line.filter_field_id:
-                        field_name = line.filter_field_id.name
-                        field_type = line.filter_field_id.ttype
-                        
-                        # Construire la condition de filtre selon le type de champ
-                        if field_type in ['char', 'text']:
-                            # Recherche insensible à la casse avec ilike
-                            filter_condition = (field_name, 'ilike', filter_value)
-                            domain.append(filter_condition)
-                        elif field_type == 'many2one':
-                            # Recherche sur le display_name du many2one
-                            filter_condition = (field_name + '.name', 'ilike', filter_value)
-                            domain.append(filter_condition)
+                    if line and line.exists() and line.line_filter_ids:
+                        print(f"Nombre de line_filter_ids: {len(line.line_filter_ids)}")
+                        for line_filter in line.line_filter_ids:
+                            filter_def_id = line_filter.filter_def_id.id
+                            # Convertir les clés du dictionnaire en int pour la comparaison
+                            filter_value = None
+                            for key, val in filters_values.items():
+                                if int(key) == filter_def_id:
+                                    filter_value = val
+                                    break
+                            
+                            print(f"  - Checking filter_def_id={filter_def_id}, filter_value={filter_value}")
+                            if filter_value:
+                                field_name = line_filter.field_id.name
+                                field_type = line_filter.field_id.ttype
+                                filter_type = line_filter.filter_def_id.filter_type
+                                
+                                print(f"    Applying filter: field={field_name}, type={filter_type}, value={filter_value}")
+                                
+                                # Utiliser le parser avancé
+                                parsed_domain = self._parse_filter_value(field_name, field_type, filter_value, filter_type)
+                                if parsed_domain:
+                                    domain.extend(parsed_domain)
+                                    print(f"      Added filter domain: {parsed_domain}")
                 except Exception as e:
-                    pass
+                    print(f"ERREUR lors de l'application des filtres: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            print(f"Domaine final: {domain}")
+            print("==================\n")
 
             # Récupérer le contexte du filtre
             context = {}
@@ -168,16 +433,24 @@ class TableauDeBordController(http.Controller):
 
             # Déterminer le type de vue à utiliser
             view_type = self._get_view_type_from_context(ctx)
+            
+            print(f"\n[VIEW TYPE] Detected view_type: {view_type}")
 
             model = model.with_context(ctx)
             if view_type == 'graph':
+                print(f"[VIEW TYPE] Calling _get_graph_data")
                 return self._get_graph_data(model, filter_obj, domain, ctx, line)
             elif view_type == 'pivot':
+                print(f"[VIEW TYPE] Calling _get_pivot_data")
                 return self._get_pivot_data(model, filter_obj, domain, ctx, line)
             else:
+                print(f"[VIEW TYPE] Calling _get_list_data")
                 return self._get_list_data(model, filter_obj, domain, ctx, line)
 
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR in get_filter_data] {e}")
+            import traceback
+            traceback.print_exc()
             return {'error': 'Une erreur s\'est produite'}
 
     def _get_view_type_from_context(self, context):
@@ -299,20 +572,46 @@ class TableauDeBordController(http.Controller):
         # Récupérer les métadonnées complètes des champs pour le formatage
         fields_def = model.fields_get(fields_to_display)
         
+        print(f"\n[LIST DATA DEBUG] list_groupby={list_groupby}, fields_to_display={fields_to_display}")
+        
         # Si regroupement défini, utiliser read_group au lieu de search/read
         if list_groupby:
+            print(f"[LIST DATA DEBUG] Using GROUPED list data")
             return self._get_grouped_list_data(
                 model, filter_obj, domain, context, line,
                 list_groupby, fields_to_display, field_labels, fields_def,
                 order_string, limit, show_record_count
             )
         
+        print(f"[LIST DATA DEBUG] Using NORMAL list data")
         # Mode normal sans regroupement
         # Appliquer le tri si défini
+        print(f"\n[BEFORE SEARCH] Domain: {domain}, Limit: {limit}, Order: {order_string}")
+        
         if order_string:
             recs = model.search(domain, limit=limit, order=order_string)
         else:
             recs = model.search(domain, limit=limit)
+        
+        # DEBUG: Afficher les résultats
+        print(f"[SEARCH RESULTS] Found {len(recs)} records")
+        try:
+            if recs:
+                print(f"[SEARCH RESULTS] First 10 IDs: {recs.ids[:10]}")
+                if 'name' in model._fields:
+                    names = [r.name if hasattr(r, 'name') else 'N/A' for r in recs[:10]]
+                    print(f"[SEARCH RESULTS] Names: {names}")
+                if 'client_id' in model._fields:
+                    clients = []
+                    for r in recs[:10]:
+                        if hasattr(r, 'client_id') and r.client_id:
+                            clients.append((r.id, r.client_id.name))
+                        else:
+                            clients.append((r.id, 'N/A'))
+                    print(f"[SEARCH RESULTS] Clients: {clients}")
+        except Exception as e:
+            print(f"[SEARCH RESULTS ERROR] {e}")
+        print()
             
         # Lire les données et convertir en dictionnaires normaux pour éviter les frozendict
         raw_data = recs.read(fields_to_display) if recs else []
@@ -381,6 +680,8 @@ class TableauDeBordController(http.Controller):
         - Une ligne de total par groupe de niveau 1 (ex: Secteur)
         - En dessous, les lignes de détail du niveau 2 (ex: Partner) avec la colonne niveau 1 vide
         """
+        print(f"\n[GROUPED LIST] Domain: {domain}, Groupby: {list_groupby}")
+        
         # Parser order_string pour le tri après read_group
         # Format: "field1 asc, field2 desc"
         sort_config = []
@@ -778,10 +1079,26 @@ class TableauDeBordController(http.Controller):
             
             agg_label = f"{agg_french} de {measure_field_name}"
 
+        print(f"[GRAPH DATA] Domain: {domain}")
+        print(f"[GRAPH DATA] Groupbys: {groupbys}")
+        print(f"[GRAPH DATA] Measure: {measure}, Use count: {use_count}")
+        
         try:
             # NE PAS appliquer limit dans read_group (on le fera après le tri)
             results = model.read_group(domain, fields=fields, groupby=groupbys, lazy=False)
-        except Exception:
+            print(f"[GRAPH DATA] Read_group returned {len(results)} groups")
+            for idx, r in enumerate(results):
+                print(f"[GRAPH DATA] Group {idx}: {r}")
+                # Vérifier le nom réel du client
+                if 'client_id' in r and r['client_id']:
+                    client_id_val = r['client_id'][0] if isinstance(r['client_id'], (list, tuple)) else r['client_id']
+                    try:
+                        client = request.env['res.partner'].sudo().browse(client_id_val)
+                        print(f"[GRAPH DATA] Client {client_id_val} - name field: '{client.name}'")
+                    except Exception as e:
+                        print(f"[GRAPH DATA] Could not read client {client_id_val}: {e}")
+        except Exception as e:
+            print(f"[GRAPH DATA] Read_group failed: {e}")
             results = []
 
         # Construire les labels et valeurs
@@ -792,6 +1109,7 @@ class TableauDeBordController(http.Controller):
                 for gb in groupbys:
                     base = gb.split(':')[0]
                     val = r.get(gb) or r.get(base) or r.get(f"{gb}_name") or r.get(f"{base}_name")
+                    print(f"[GRAPH LABEL] Groupby: {gb}, Base: {base}, Value from record: {val}")
                     # Pour les many2one (tuple/list), prendre le display_name (2ème élément)
                     if isinstance(val, (list, tuple)) and len(val) > 1:
                         label_parts.append(str(val[1]) if val[1] is not None else '')
@@ -800,6 +1118,7 @@ class TableauDeBordController(http.Controller):
                     else:
                         label_parts.append('')
                 label = " / ".join([p for p in label_parts if p])
+                print(f"[GRAPH LABEL] Final label: '{label}' from parts: {label_parts}")
                 
                 if use_count:
                     value = r.get("__count") or 0
