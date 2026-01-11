@@ -21,9 +21,7 @@
                     </group>
                     <notebook>
                         <page string="Filtre (Domaine)" name="domain">
-                            <group>
-                                <field name="domain" widget="domain" options="{'model': 'model_id'}" nolabel="1"/>
-                            </group>
+                            <field name="domain" widget="domain" options="{'model': 'model_id'}"/>
                         </page>
                         <page string="Détails techniques" name="technical">
                             <group string="Détails techniques">
@@ -36,7 +34,7 @@
                                 <field name="is_menu_id"  readonly="1"/>
                                 <field name="is_view_id"  readonly="1"/>
                                 <field name="is_view_type"  readonly="1"/>
-                                <field name="is_visible_columns" readonly="1"/>
+                                <field name="is_visible_columns"/>
                             </group>
                         </page>
                     </notebook>
