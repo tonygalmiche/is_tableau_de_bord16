@@ -16,6 +16,38 @@ class IsTableauDeBord(models.Model):
     active = fields.Boolean('Actif', default=True)
     color = fields.Integer('Couleur', default=lambda self: random.randint(1, 11))
     image = fields.Binary('Image', attachment=True)
+    user_id = fields.Many2one('res.users', string='Créateur', default=lambda self: self.env.user, 
+                              help='Utilisateur qui a créé ce tableau de bord')
+    can_edit = fields.Boolean('Peut modifier', compute='_compute_can_edit', store=False)
+
+    @api.depends('user_id')
+    @api.depends_context('uid')
+    def _compute_can_edit(self):
+        """Calcule si l'utilisateur courant peut modifier le tableau de bord"""
+        is_admin = self.env.user.has_group('is_tableau_de_bord16.group_tableau_de_bord_administrateur')
+        is_manager = self.env.user.has_group('is_tableau_de_bord16.group_tableau_de_bord_manager')
+
+        for record in self:
+            if is_admin:
+                # Administrateur peut tout modifier
+                record.can_edit = True
+            elif is_manager:
+                # Gestionnaire peut modifier :
+                # - Les nouveaux enregistrements (création) : pas d'id réel en base
+                # - Ses propres tableaux de bord : user_id = utilisateur courant
+                # - Si user_id n'est pas défini (création) : peut modifier
+                if not record._origin.id:
+                    # Nouvel enregistrement en cours de création (NewId)
+                    record.can_edit = True
+                elif not record.user_id:
+                    # Pas de créateur défini, autoriser
+                    record.can_edit = True
+                else:
+                    # Enregistrement existant : vérifier si c'est le créateur
+                    record.can_edit = record.user_id.id == self.env.user.id
+            else:
+                # Utilisateur simple ne peut pas modifier
+                record.can_edit = False
 
     def action_view_dashboard(self):
         """Action pour afficher le tableau de bord"""
@@ -78,8 +110,9 @@ class IsTableauDeBord(models.Model):
 
     @api.model
     def check_is_manager(self):
-        """Vérifier si l'utilisateur actuel est un gestionnaire de tableau de bord"""
-        return self.env.user.has_group('is_tableau_de_bord16.group_tableau_de_bord_manager')
+        """Vérifier si l'utilisateur actuel est un gestionnaire ou administrateur de tableau de bord"""
+        return self.env.user.has_group('is_tableau_de_bord16.group_tableau_de_bord_manager') or \
+               self.env.user.has_group('is_tableau_de_bord16.group_tableau_de_bord_administrateur')
 
     @api.model
     def action_open_tableaux_de_bord(self):
@@ -197,7 +230,7 @@ class IsTableauDeBordLine(models.Model):
     ], string='Ordre du tri', default='asc', help='Ordre de tri (pivot et graphique)')
     pivot_show_row_totals = fields.Boolean('Afficher les totaux des lignes', default=True, help='Ajouter une colonne de total pour chaque ligne')
     pivot_show_col_totals = fields.Boolean('Afficher les totaux des colonnes', default=True, help='Ajouter une ligne de total pour chaque colonne')
-    limit = fields.Integer('Limite', default=0, help='Nombre maximum de lignes à afficher (0 = toutes les lignes)')
+    limit = fields.Integer('Limite', default=0, help='Nombre maximum de lignes à afficher (0 = 200 par défaut pour performances)')
     list_groupby = fields.Char('Regroupement liste', help='Champs de regroupement pour le mode liste (ex: secteur_id,partner_id). Si défini, affiche une ligne par regroupement avec les totaux des champs numériques.')
     filter_domain     = fields.Char(compute='_compute_filter_domain', store=False)
     field_ids         = fields.One2many('is.tableau.de.bord.line.field', 'line_id', string='Champs de la liste', copy=True)

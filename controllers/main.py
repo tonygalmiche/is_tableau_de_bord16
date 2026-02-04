@@ -167,8 +167,9 @@ class TableauDeBordController(http.Controller):
         """Parse un filtre texte avec wildcards"""
         # Gérer les wildcards
         if '*' in filter_value:
+            # Utiliser =ilike pour respecter exactement le pattern (sans % implicite)
             pattern = filter_value.replace('*', '%')
-            return [(field_name, 'ilike', pattern)]
+            return [(field_name, '=ilike', pattern)]
         else:
             # Recherche contient par défaut (ajouter % des 2 côtés)
             pattern = f'%{filter_value}%'
@@ -331,7 +332,6 @@ class TableauDeBordController(http.Controller):
                     import traceback
                     traceback.print_exc()
 
-            print(f"Domaine final: {domain}")
 
             # Récupérer le contexte du filtre
             context = {}
@@ -458,9 +458,9 @@ class TableauDeBordController(http.Controller):
         avec les totaux des champs numériques visibles.
         """
         # Déterminer la limite et show_record_count
-        # limit=0 signifie pas de limite (tous les enregistrements)
-        # limit=None utilisera la valeur par défaut (50)
-        limit = 50  # Valeur par défaut
+        # limit=0 signifie limite par défaut (200 pour performances)
+        # limit>0 utilisera la valeur définie par l'utilisateur
+        limit = 200  # Valeur par défaut pour performances
         show_record_count = context.get('show_record_count', True)
         list_groupby = None  # Regroupement pour le mode liste
         
@@ -470,10 +470,10 @@ class TableauDeBordController(http.Controller):
             if isinstance(list_groupby_str, str) and list_groupby_str.strip():
                 list_groupby = [g.strip() for g in list_groupby_str.split(',') if g.strip()]
         
-        # Gestion du limit : 0 = pas de limite (None), sinon utiliser la valeur définie
+        # Gestion du limit : 0 = limite par défaut (200), sinon utiliser la valeur définie
         if line and hasattr(line, 'limit'):
             if line.limit == 0:
-                limit = None  # Pas de limite, afficher tous les enregistrements
+                limit = 200  # Limite par défaut pour performances
             elif line.limit > 0:
                 limit = line.limit
         if line and hasattr(line, 'show_record_count'):

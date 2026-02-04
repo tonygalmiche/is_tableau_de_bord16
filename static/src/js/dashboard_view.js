@@ -61,8 +61,8 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
     },
 
     async _setupDashboard() {
-        // Vérifier si l'utilisateur est gestionnaire
-        await this._checkUserPermissions();
+        // Vérifier si l'utilisateur peut modifier ce tableau de bord
+        this._checkCanEdit();
         
         // Créer les inputs de filtres
         this._createFilterInputs();
@@ -305,17 +305,13 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         }
     },
 
-    async _checkUserPermissions() {
-        try {
-            const result = await this.rpc("/web/dataset/call_kw/is.tableau.de.bord/check_is_manager", {
-                model: 'is.tableau.de.bord',
-                method: 'check_is_manager',
-                args: [],
-                kwargs: {},
-            });
-            this.isManager = result;
-        } catch (error) {
-            this.isManager = false;
+    _checkCanEdit() {
+        // Lire le champ can_edit du record pour savoir si l'utilisateur peut modifier
+        const record = this.model.root;
+        if (record && record.data) {
+            this.canEdit = record.data.can_edit === true;
+        } else {
+            this.canEdit = false;
         }
     },
 
@@ -349,7 +345,7 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
             const heightPx = parseInt(line.height || 400, 10);
             
             let editButtons = '';
-            if (this.isManager) {
+            if (this.canEdit) {
                 editButtons = `
                     <a href="#" class="btn btn-sm btn-outline-info edit-line-link" data-line-id="${serverLineId}" title="Modifier la ligne du tableau de bord">
                         <i class="fa fa-pencil"></i>
@@ -391,7 +387,7 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         
         setTimeout(() => {
             this._attachOpenFilterLinks();
-            if (this.isManager) {
+            if (this.canEdit) {
                 this._attachEditLineLinks();
                 this._attachEditFilterLinks();
             }
