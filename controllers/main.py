@@ -374,6 +374,8 @@ class TableauDeBordController(http.Controller):
                             ctx['graph_groupbys'] = line.graph_groupbys
                         # Toujours passer graph_show_legend (avec valeur par défaut True)
                         ctx['graph_show_legend'] = line.graph_show_legend if hasattr(line, 'graph_show_legend') else True
+                        # Passer graph_stacked
+                        ctx['graph_stacked'] = line.graph_stacked if hasattr(line, 'graph_stacked') else False
                         if line.pivot_row_groupby:
                             # Convertir la chaîne en liste si nécessaire
                             ctx['pivot_row_groupby'] = [g.strip() for g in line.pivot_row_groupby.split(',')] if ',' in line.pivot_row_groupby else [line.pivot_row_groupby]
@@ -402,7 +404,7 @@ class TableauDeBordController(http.Controller):
             # Appliquer aussi d'éventuels overrides envoyés côté client (sécurisé au scope utilisateur)
             if isinstance(overrides, dict):
                 safe_keys = {
-                    'search_default_view_type', 'graph_chart_type', 'graph_aggregator', 'graph_show_legend', 'show_data_title', 'show_record_count',
+                    'search_default_view_type', 'graph_chart_type', 'graph_aggregator', 'graph_show_legend', 'graph_stacked', 'show_data_title', 'show_record_count',
                     'pivot_row_groupby', 'pivot_column_groupby', 'pivot_measures',
                     'pivot_sort_by', 'pivot_sort_order',
                     'graph_groupbys', 'graph_measure', 'list_fields', 'measure', 'group_by',
@@ -1030,6 +1032,7 @@ class TableauDeBordController(http.Controller):
         measure = context.get('graph_measure') or context.get('measure')
         aggregator = context.get('graph_aggregator') or 'sum'
         chart_type = context.get('graph_chart_type') or 'bar'
+        graph_stacked = bool(context.get('graph_stacked', False))
         # Gérer explicitement le booléen (peut être False, True, ou absent)
         show_legend = context.get('graph_show_legend')
         if show_legend is None:
@@ -1069,6 +1072,73 @@ class TableauDeBordController(http.Controller):
         except Exception:
             results = []
 
+        # --- Mode graphique empilé : 2 groupements, 1er = axe X, 2ème = séries ---
+        palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+        if graph_stacked and len(groupbys) >= 2 and results:
+            gb_x = groupbys[0]
+            gb_series = groupbys[1]
+
+            # Récupérer les maps Selection pour les deux groupements
+            sel_map_x = self._get_selection_map(model, gb_x.split(':')[0])
+            sel_map_s = self._get_selection_map(model, gb_series.split(':')[0])
+
+            def _get_label(r, gb, sel_map):
+                return self._extract_label_from_record(r, gb, sel_map)
+
+            # Collecter tous les labels X et toutes les séries (dans l'ordre d'apparition)
+            x_labels_ordered = []
+            series_ordered = []
+            data_map = {}  # (x_label, series_label) -> value
+            for r in results:
+                x_lbl = _get_label(r, gb_x, sel_map_x)
+                s_lbl = _get_label(r, gb_series, sel_map_s)
+                if use_count:
+                    value = r.get("__count") or 0
+                else:
+                    value = r.get(f"{measure}_{aggregator}") or r.get(measure) or 0
+                if x_lbl not in x_labels_ordered:
+                    x_labels_ordered.append(x_lbl)
+                if s_lbl not in series_ordered:
+                    series_ordered.append(s_lbl)
+                data_map[(x_lbl, s_lbl)] = value
+
+            # Tri des labels X
+            if sort_by == 'total':
+                x_totals = {x: sum(data_map.get((x, s), 0) for s in series_ordered) for x in x_labels_ordered}
+                reverse = (sort_order == 'desc')
+                x_labels_ordered.sort(key=lambda x: x_totals.get(x, 0), reverse=reverse)
+            else:
+                reverse = (sort_order == 'desc')
+                x_labels_ordered.sort(key=lambda x: self._sort_key_smart(x), reverse=reverse)
+
+            if limit and limit > 0:
+                x_labels_ordered = x_labels_ordered[:limit]
+
+            # Construire les datasets (un par série)
+            datasets = []
+            for i, s_lbl in enumerate(series_ordered):
+                color = palette[i % len(palette)]
+                datasets.append({
+                    'label': s_lbl,
+                    'data': [data_map.get((x, s_lbl), 0) for x in x_labels_ordered],
+                    'backgroundColor': color,
+                    'borderWidth': 1,
+                })
+
+            return {
+                'type': 'graph',
+                'chart_type': chart_type,
+                'stacked': True,
+                'show_legend': show_legend,
+                'show_data_title': show_data_title,
+                'data': {
+                    'labels': x_labels_ordered,
+                    'datasets': datasets,
+                    'agg_label': agg_label,
+                }
+            }
+
+        # --- Mode graphique standard (non empilé) ---
         # Construire les labels et valeurs
         data_list = []
         if results:
@@ -1115,12 +1185,12 @@ class TableauDeBordController(http.Controller):
         values = [item['value'] for item in data_list]
 
         # Ajuster la palette à la longueur
-        palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
         bg = [palette[i % len(palette)] for i in range(len(values))]
 
         result = {
             'type': 'graph',
             'chart_type': chart_type,
+            'stacked': False,
             'show_legend': show_legend,
             'show_data_title': show_data_title,
             'data': {

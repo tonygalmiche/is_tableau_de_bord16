@@ -213,6 +213,7 @@ class IsTableauDeBordLine(models.Model):
     
     graph_measure = fields.Char('Graph: Mesure', help='Champ utilisé pour la mesure du graphique')
     graph_groupbys = fields.Char('Graph: Groupements', help='Liste des groupements pour le graphique (ex: invoice_date:year)')
+    graph_stacked = fields.Boolean('Graphique empilé', default=False, help='Afficher les barres empilées (nécessite au moins 2 groupements)')
     graph_show_legend = fields.Boolean('Afficher la légende', default=True, help='Afficher ou masquer la légende du graphique')
     show_data_title = fields.Boolean('Afficher le titre des données', default=True, help='Afficher ou masquer le titre du graphique/pivot (ex: "Somme de Total HT" ou "Mesure: Montant")')
     show_record_count = fields.Boolean('Afficher le nombre d\'enregistrements', default=True, help='Afficher ou masquer le compteur d\'enregistrements en bas de liste')
@@ -389,6 +390,10 @@ class IsTableauDeBordLine(models.Model):
                         self.list_groupby = ','.join(group_by)
                     elif group_by:
                         self.list_groupby = str(group_by)
+                
+                # Récupérer graph_stacked
+                if 'graph_stacked' in context:
+                    self.graph_stacked = bool(context['graph_stacked'])
             
             except Exception:
                 pass  # En cas d'erreur de parsing, on ignore
@@ -570,6 +575,10 @@ class IsTableauDeBordLine(models.Model):
                 else:
                     result['graph_groupbys'] = str(row_groupby)
             
+            # Récupérer graph_stacked
+            if 'graph_stacked' in context:
+                result['graph_stacked'] = bool(context['graph_stacked'])
+
             # Récupérer group_by pour le mode liste
             if 'group_by' in context:
                 group_by = context['group_by']
@@ -664,6 +673,7 @@ class IsTableauDeBordLine(models.Model):
             context['graph_mode'] = self.graph_chart_type
         if self.graph_aggregator:
             context['graph_aggregator'] = self.graph_aggregator
+        context['graph_stacked'] = self.graph_stacked
         if self.pivot_measure:
             context['pivot_measures'] = [self.pivot_measure]
         if self.pivot_row_groupby:

@@ -128,6 +128,7 @@
                     <group attrs="{'invisible': [('display_mode', '!=', 'graph')]}">
                         <group>
                             <field name="graph_chart_type"/>
+                            <field name="graph_stacked"/>
                             <field name="graph_show_legend"/>
                             <field name="show_data_title"/>
                             <field name="pivot_sort_by"/>

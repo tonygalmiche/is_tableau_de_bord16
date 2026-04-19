@@ -670,7 +670,8 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         const isPieChart = (data.chart_type || 'bar') === 'pie';
         const paddingClass = isPieChart ? 'p-1' : 'p-2';
         const titleMargin = isPieChart ? 'mb-0' : 'mb-1';
-        const graphTitle = data.data?.datasets?.[0]?.label || 'Graphique';
+        // Pour le mode empilé, utiliser agg_label ; sinon le label du premier dataset
+        const graphTitle = data.data?.agg_label || data.data?.datasets?.[0]?.label || 'Graphique';
         const showDataTitle = data.show_data_title !== undefined ? data.show_data_title : true;
         
         let titleHtml = '';
@@ -689,9 +690,9 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
         container.innerHTML = html;
         container.className = "dashboard-item h-100";
 
-        const dataset = data.data?.datasets?.[0];
+        const datasets = data.data?.datasets || [];
         const labels = data.data?.labels || [];
-        if (!dataset) {
+        if (!datasets.length) {
             container.innerHTML = '<div class="alert alert-info m-2">Aucune donnée graphique disponible</div>';
             return;
         }
@@ -701,6 +702,7 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
             const showLegend = data.show_legend !== undefined ? data.show_legend : true;
             const chartType = data.chart_type || 'bar';
             const isPieChart = chartType === 'pie';
+            const isStacked = data.stacked === true && !isPieChart;
             
             const chartOptions = {
                 responsive: true,
@@ -734,7 +736,8 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
             
             if (!isPieChart) {
                 chartOptions.scales = {
-                    y: { beginAtZero: true }
+                    xAxes: [{ stacked: isStacked }],
+                    yAxes: [{ ticks: { beginAtZero: true }, stacked: isStacked }]
                 };
             }
             
@@ -742,21 +745,22 @@ patch(FormController.prototype, "is_tableau_de_bord16.FormController", {
                 type: chartType,
                 data: {
                     labels,
-                    datasets: [{
-                        label: dataset.label,
-                        data: dataset.data,
-                        backgroundColor: dataset.backgroundColor || '#1f77b4',
+                    datasets: data.data.datasets.map((ds, i) => ({
+                        label: ds.label,
+                        data: ds.data,
+                        backgroundColor: ds.backgroundColor || '#1f77b4',
                         borderWidth: 1,
-                    }]
+                    }))
                 },
                 options: chartOptions
             });
         } else {
+            const dataset = datasets[0];
             let fallback = '<div class="text-center p-4 h-100 d-flex flex-column justify-content-center">';
-            fallback += `<h5 class="mb-3">${dataset.label}</h5>`;
+            fallback += `<h5 class="mb-3">${dataset ? dataset.label : graphTitle}</h5>`;
             fallback += '<div class="row flex-grow-1 align-items-center">';
             for (let i = 0; i < labels.length; i++) {
-                const value = dataset.data[i];
+                const value = dataset ? dataset.data[i] : 0;
                 const label = labels[i];
                 fallback += `<div class="col text-center">
                     <div class="display-4 text-primary mb-2">${value}</div>
