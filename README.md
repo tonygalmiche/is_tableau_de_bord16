@@ -269,6 +269,10 @@ Les domaines et contextes des recherches enregistrées sont respectés :
 
 ## 📝 Notes de version
 
+### Version 16.0.0.4.0
+- Ajout du champ **Accès en consultation** (`consultation_user_ids`) sur le tableau de bord
+- Nouvelle règle de sécurité restreignant la lecture des tableaux de bord pour les utilisateurs simples selon cette liste
+
 ### Version 16.0.0.3.0
 - Migration vers Odoo 16
 - Adaptation des appels RPC pour Odoo 16

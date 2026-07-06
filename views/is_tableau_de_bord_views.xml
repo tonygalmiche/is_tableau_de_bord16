@@ -17,6 +17,7 @@
                         <group>
                             <field name="name" attrs="{'readonly': [('can_edit', '=', False)]}"/>
                             <field name="description" widget="text" attrs="{'readonly': [('can_edit', '=', False)]}"/>
+                            <field name="consultation_user_ids" widget="many2many_tags" attrs="{'readonly': [('can_edit', '=', False)]}"/>
                         </group>
                         <group>
                             <field name="user_id" readonly="1"/>
@@ -308,7 +309,7 @@ else:
                                     </div>
                                 </t>
                                 <div class="text-muted small mt-2">
-                                    <i class="fa fa-user"/> <field name="user_id"/>
+                                    <i class="fa fa-user" title="Créateur"/> <field name="user_id"/>
                                 </div>
                             </div>
                         </div>

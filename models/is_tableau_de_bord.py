@@ -16,9 +16,12 @@ class IsTableauDeBord(models.Model):
     active = fields.Boolean('Actif', default=True)
     color = fields.Integer('Couleur', default=lambda self: random.randint(1, 11))
     image = fields.Binary('Image', attachment=True)
-    user_id = fields.Many2one('res.users', string='Créateur', default=lambda self: self.env.user, 
+    user_id = fields.Many2one('res.users', string='Créateur', default=lambda self: self.env.user,
                               help='Utilisateur qui a créé ce tableau de bord')
     can_edit = fields.Boolean('Peut modifier', compute='_compute_can_edit', store=False)
+    consultation_user_ids = fields.Many2many('res.users', string='Accès en consultation',
+                              help="Utilisateurs autorisés à consulter ce tableau de bord en plus du créateur et des gestionnaires. "
+                                   "Si aucun utilisateur n'est sélectionné, le tableau de bord reste visible par tous les utilisateurs.")
 
     @api.depends('user_id')
     @api.depends_context('uid')

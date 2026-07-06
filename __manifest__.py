@@ -2,7 +2,7 @@
 
 {
   "name" : "InfoSaône - Tableau de bord pour Odoo 16",
-  "version" : "16.0.0.3.0",
+  "version" : "16.0.0.4.0",
   "author" : "InfoSaône / Tony Galmiche",
   "category" : "InfoSaône",
   "description": """
