@@ -82,10 +82,18 @@ Le module **is_tableau_de_bord16** est un module développé par InfoSaône perm
 
 ## 🔐 Gestion des droits
 
-### Deux niveaux d'accès
+### Trois niveaux d'accès
+
+#### 🙋 Utilisateur simple (sans groupe Tableau de bord)
+- N'a pas besoin d'être affecté à un groupe du module
+- Voit le menu **Tableaux de bord** et n'accède **qu'aux tableaux de bord où il est
+  explicitement listé dans le champ `consultation_user_ids`** ("Accès en consultation")
+- Accès en lecture seule (vue kanban puis vue dashboard)
+- Le filtre de recherche "Mes tableaux de bord" inclut à la fois ses propres tableaux
+  de bord (créateur) et ceux où il est en consultation
 
 #### 👥 Utilisateur (group_tableau_de_bord_user)
-- Visualisation des tableaux de bord
+- Visualisation de **tous** les tableaux de bord, sans restriction de consultation
 - Accès en lecture seule
 - Vue kanban uniquement
 - Impossibilité de modifier les configurations
@@ -93,10 +101,27 @@ Le module **is_tableau_de_bord16** est un module développé par InfoSaône perm
 #### 👤 Gestionnaire (group_tableau_de_bord_manager)
 - Tous les droits utilisateur
 - Création de nouveaux tableaux de bord
-- Modification des tableaux de bord existants
+- Modification de ses propres tableaux de bord (lecture de tous les tableaux de bord)
 - Accès aux vues liste et formulaire
 - Configuration des éléments du tableau de bord
 - Actions d'édition visibles dans l'interface
+
+#### 🛡️ Administrateur (group_tableau_de_bord_administrateur)
+- Tous les droits gestionnaire, sur l'ensemble des tableaux de bord (pas seulement les siens)
+
+### Champ "Accès en consultation" (`consultation_user_ids`)
+Sur chaque tableau de bord, permet de désigner des utilisateurs qui n'ont pas
+besoin d'appartenir au groupe **Utilisateur** du module pour le consulter. Ce
+mécanisme repose sur :
+- une règle d'accès (`ir.rule`) restreignant, pour tout utilisateur interne,
+  la lecture aux tableaux de bord où il figure dans `consultation_user_ids`
+- des droits de lecture (`ir.model.access.csv`) accordés au groupe de base
+  `base.group_user` sur le modèle et ses modèles annexes (lignes, champs,
+  définitions de filtres, filtres mémorisés)
+
+Si `consultation_user_ids` est vide, le tableau de bord n'est pas visible pour
+les utilisateurs simples (seuls le créateur, les gestionnaires, les
+administrateurs et les membres du groupe **Utilisateur** y ont accès).
 
 ## 🛠️ Architecture technique
 
@@ -268,6 +293,19 @@ Les domaines et contextes des recherches enregistrées sont respectés :
 - Consultez la console JavaScript du navigateur
 
 ## 📝 Notes de version
+
+### Version 16.0.0.5.0
+- Correction : un utilisateur simple (sans le groupe **Utilisateur** du module)
+  n'avait aucun accès au modèle et le menu **Tableaux de bord** restait invisible,
+  même s'il figurait dans `consultation_user_ids`
+- Ajout des droits (`ir.model.access.csv`) et d'une règle de sécurité (`ir.rule`)
+  pour `base.group_user`, limitée aux tableaux de bord où l'utilisateur est listé
+  dans `consultation_user_ids`
+- Le groupe **Utilisateur** (`group_tableau_de_bord_user`) voit désormais tous les
+  tableaux de bord sans condition (auparavant limité à ceux sans consultation
+  restreinte ou où il était lui-même listé)
+- Le filtre de recherche "Mes tableaux de bord" inclut maintenant aussi les
+  tableaux de bord où l'utilisateur est en consultation
 
 ### Version 16.0.0.4.0
 - Ajout du champ **Accès en consultation** (`consultation_user_ids`) sur le tableau de bord

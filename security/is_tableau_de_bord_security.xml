@@ -50,13 +50,25 @@
         <field name="perm_unlink" eval="True"/>
     </record>
 
-    <!-- Règle pour les utilisateurs simples : lecture uniquement des TdB sans restriction
-         de consultation, ou dont ils font partie des utilisateurs autorisés en consultation -->
+    <!-- Règle pour les utilisateurs du groupe "Utilisateur" : lecture de tous les TdB -->
     <record id="tableau_de_bord_user_consultation_rule" model="ir.rule">
-        <field name="name">Tableau de bord: utilisateur accès en consultation</field>
+        <field name="name">Tableau de bord: utilisateur accès à tous les TdB</field>
         <field name="model_id" ref="model_is_tableau_de_bord"/>
-        <field name="domain_force">['|', ('consultation_user_ids', '=', False), ('consultation_user_ids', 'in', [user.id])]</field>
+        <field name="domain_force">[(1, '=', 1)]</field>
         <field name="groups" eval="[(4, ref('group_tableau_de_bord_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Règle pour les utilisateurs simples (sans le groupe Tableau de bord) : lecture
+         uniquement des TdB où ils figurent dans les utilisateurs autorisés en consultation -->
+    <record id="tableau_de_bord_simple_user_consultation_rule" model="ir.rule">
+        <field name="name">Tableau de bord: utilisateur simple accès en consultation</field>
+        <field name="model_id" ref="model_is_tableau_de_bord"/>
+        <field name="domain_force">[('consultation_user_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
         <field name="perm_read" eval="True"/>
         <field name="perm_write" eval="False"/>
         <field name="perm_create" eval="False"/>
@@ -81,6 +93,17 @@
         <field name="model_id" ref="base.model_ir_filters"/>
         <field name="domain_force">[('user_id', '!=', False)]</field>
         <field name="groups" eval="[(4, ref('group_tableau_de_bord_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="ir_filters_tableau_de_bord_simple_user_rule" model="ir.rule">
+        <field name="name">Tableau de bord: utilisateur simple accès à tous les filtres utilisateur</field>
+        <field name="model_id" ref="base.model_ir_filters"/>
+        <field name="domain_force">[('user_id', '!=', False)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
         <field name="perm_read" eval="True"/>
         <field name="perm_write" eval="False"/>
         <field name="perm_create" eval="False"/>

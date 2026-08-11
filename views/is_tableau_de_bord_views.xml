@@ -327,7 +327,7 @@ else:
             <search string="Rechercher un tableau de bord">
                 <field name="name"/>
                 <field name="user_id"/>
-                <filter name="my_dashboards" string="Mes tableaux de bord" domain="[('user_id', '=', uid)]"/>
+                <filter name="my_dashboards" string="Mes tableaux de bord" domain="['|', ('user_id', '=', uid), ('consultation_user_ids', 'in', [uid])]"/>
                 <filter name="all_dashboards" string="Tous les tableaux de bord" domain="[]"/>
                 <separator/>
                 <filter name="active" string="Actifs" domain="[('active', '=', True)]"/>
@@ -477,7 +477,7 @@ action = records.action_refresh_all_lines_from_filters()
     <!-- Menu racine -->
     <menuitem id="is_tableau_de_bord_menu_root"
               name="Tableaux de bord"
-              groups="group_tableau_de_bord_user"
+              groups="base.group_user"
               sequence="499"/>
     
     <!-- Sous-menu pour visualiser (vue kanban) -->
@@ -485,7 +485,7 @@ action = records.action_refresh_all_lines_from_filters()
               name="Mes tableaux de bord"
               parent="is_tableau_de_bord_menu_root"
               action="is_tableau_de_bord_action_view_kanban"
-              groups="group_tableau_de_bord_user"
+              groups="base.group_user"
               sequence="10"/>
 
     <!-- Menu de configuration pour les gestionnaires (leurs TdB uniquement) -->
