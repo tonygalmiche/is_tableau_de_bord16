@@ -133,8 +133,8 @@ class TableauDeBordController(http.Controller):
                 return self._parse_numeric_filter(field_name, filter_value)
             
             # Date
-            if field_type == 'date' and filter_type == 'date':
-                return self._parse_date_filter(field_name, filter_value)
+            if field_type in ('date', 'datetime') and filter_type == 'date':
+                return self._parse_date_filter(field_name, filter_value, field_type)
             
             # Texte (char, text, many2one, selection)
             if field_type in ['char', 'text', 'selection']:
@@ -175,41 +175,67 @@ class TableauDeBordController(http.Controller):
             pattern = f'%{filter_value}%'
             return [(field_name, 'ilike', pattern)]
 
-    def _parse_date_filter(self, field_name, filter_value):
+    def _parse_date_filter(self, field_name, filter_value, field_type='date'):
         """Parse une valeur de filtre de date avec opérateurs
         Formats supportés:
         - AAAA : année complète
-        - AAAA-MM : mois complet  
+        - AAAA-MM : mois complet
         - AAAA-SXX : semaine XX de l'année
         - JJ/MM/AAAA ou AAAA-MM-JJ : date exacte
         - Avec opérateurs: >2025, <=2025-03, etc.
+
+        `field_type` précise si le champ cible est 'date' ou 'datetime'. Pour
+        un champ datetime, une borne '<=' calculée sur une date seule
+        (ex: '2025-12-31') exclurait les enregistrements horodatés après
+        minuit ce jour-là : on utilise donc '<' avec le lendemain à 00:00:00.
         """
         domain = []
-        
+        is_datetime = field_type == 'datetime'
+
+        def fmt(d):
+            return d.strftime('%Y-%m-%d %H:%M:%S') if is_datetime else d.strftime('%Y-%m-%d')
+
+        def range_domain(start_date, end_date):
+            """Domaine >= start_date et <= end_date (bornes inclusives, jour entier)."""
+            if is_datetime:
+                return [(field_name, '>=', fmt(start_date)),
+                        (field_name, '<', fmt(end_date + timedelta(days=1)))]
+            return [(field_name, '>=', fmt(start_date)),
+                    (field_name, '<=', fmt(end_date))]
+
+        def gt_domain(end_date):
+            """Domaine > fin du jour `end_date`."""
+            if is_datetime:
+                return [(field_name, '>=', fmt(end_date + timedelta(days=1)))]
+            return [(field_name, '>', fmt(end_date))]
+
+        def lt_domain(start_date):
+            """Domaine < début du jour `start_date`."""
+            return [(field_name, '<', fmt(start_date))]
+
+        def le_domain(end_date):
+            """Domaine <= fin du jour `end_date`."""
+            if is_datetime:
+                return [(field_name, '<', fmt(end_date + timedelta(days=1)))]
+            return [(field_name, '<=', fmt(end_date))]
+
         # Détecter l'opérateur
         match = re.match(r'^(>=?|<=?|=)?\s*(.+)$', filter_value.strip())
         if not match:
             return []
-        
+
         operator = match.group(1) or '='
         date_str = match.group(2).strip()
-        
+
         try:
+            start_date = end_date = None
+
             # Format année seule (AAAA)
             if re.match(r'^\d{4}$', date_str):
                 year = int(date_str)
-                if operator == '=':
-                    domain.append((field_name, '>=', f'{year}-01-01'))
-                    domain.append((field_name, '<=', f'{year}-12-31'))
-                elif operator == '>':
-                    domain.append((field_name, '>', f'{year}-12-31'))
-                elif operator == '>=':
-                    domain.append((field_name, '>=', f'{year}-01-01'))
-                elif operator == '<':
-                    domain.append((field_name, '<', f'{year}-01-01'))
-                elif operator == '<=':
-                    domain.append((field_name, '<=', f'{year}-12-31'))
-            
+                start_date = datetime(year, 1, 1)
+                end_date = datetime(year, 12, 31)
+
             # Format année-mois (AAAA-MM)
             elif re.match(r'^\d{4}-\d{2}$', date_str):
                 year, month = map(int, date_str.split('-'))
@@ -218,19 +244,7 @@ class TableauDeBordController(http.Controller):
                     end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
                 else:
                     end_date = datetime(year, month + 1, 1) - timedelta(days=1)
-                
-                if operator == '=':
-                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
-                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
-                elif operator == '>':
-                    domain.append((field_name, '>', end_date.strftime('%Y-%m-%d')))
-                elif operator == '>=':
-                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
-                elif operator == '<':
-                    domain.append((field_name, '<', start_date.strftime('%Y-%m-%d')))
-                elif operator == '<=':
-                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
-            
+
             # Format année-semaine (AAAA-SXX)
             elif re.match(r'^\d{4}-S\d{2}$', date_str.upper()):
                 year_week = date_str.upper().split('-S')
@@ -239,32 +253,31 @@ class TableauDeBordController(http.Controller):
                 jan1 = datetime(year, 1, 1)
                 start_date = jan1 + timedelta(weeks=week-1, days=-jan1.weekday())
                 end_date = start_date + timedelta(days=6)
-                
-                if operator == '=':
-                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
-                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
-                elif operator == '>':
-                    domain.append((field_name, '>', end_date.strftime('%Y-%m-%d')))
-                elif operator == '>=':
-                    domain.append((field_name, '>=', start_date.strftime('%Y-%m-%d')))
-                elif operator == '<':
-                    domain.append((field_name, '<', start_date.strftime('%Y-%m-%d')))
-                elif operator == '<=':
-                    domain.append((field_name, '<=', end_date.strftime('%Y-%m-%d')))
-            
+
             # Format date complète JJ/MM/AAAA
             elif re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
                 day, month, year = map(int, date_str.split('/'))
-                date_value = f'{year:04d}-{month:02d}-{day:02d}'
-                domain.append((field_name, operator, date_value))
-            
+                start_date = end_date = datetime(year, month, day)
+
             # Format date complète AAAA-MM-JJ
             elif re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-                domain.append((field_name, operator, date_str))
-                
+                start_date = end_date = datetime.strptime(date_str, '%Y-%m-%d')
+
+            if start_date is not None:
+                if operator == '=':
+                    domain = range_domain(start_date, end_date)
+                elif operator == '>':
+                    domain = gt_domain(end_date)
+                elif operator == '>=':
+                    domain = [(field_name, '>=', fmt(start_date))]
+                elif operator == '<':
+                    domain = lt_domain(start_date)
+                elif operator == '<=':
+                    domain = le_domain(end_date)
+
         except Exception:
             pass
-        
+
         return domain
 
     @http.route('/tableau_de_bord/save_filter', type='json', auth='user')
@@ -1250,9 +1263,24 @@ class TableauDeBordController(http.Controller):
             'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12
         }
         
+        import re
+
+        # Détecter les libellés composites "AAAA / xxx" produits par un double
+        # groupement (ex: "date:year,date:month" -> "2025 / août"). On isole
+        # la partie après "AAAA / " et on la traite comme un sous-libellé,
+        # préfixé par l'année pour garder un tri chronologique global.
+        composite_match = re.match(r'^(\d{4})\s*/\s*(.+)$', label_str)
+        if composite_match:
+            year, rest = composite_match.groups()
+            sub_key = self._sort_key_smart(rest)
+            # sub_key commence par (0, ...) si `rest` a bien été reconnu comme
+            # une sous-période (mois, trimestre...) ; sinon on la garde telle
+            # quelle en dernière position de la clé.
+            rest_parts = sub_key[1:] if sub_key[0] == 0 else (sub_key,)
+            return (0, int(year)) + rest_parts
+
         # Détecter les dates au format "mois YYYY" (groupement date:month en français)
         # Ex: "janvier 2025", "février 2025", etc.
-        import re
         french_month_match = re.match(r'^(\w+)\s+(\d{4})$', label_str, re.IGNORECASE)
         if french_month_match:
             month_name, year = french_month_match.groups()
@@ -1260,7 +1288,7 @@ class TableauDeBordController(http.Controller):
             if month_name_lower in french_months:
                 # Retourner une clé de tri : (0, année, mois) pour tri chronologique
                 return (0, int(year), french_months[month_name_lower])
-        
+
         # Détecter les dates au format "MM/YYYY" (groupement date:month numérique)
         # Ex: "01/2024", "02/2024", etc.
         month_match = re.match(r'^(\d{2})/(\d{4})$', label_str)
@@ -1268,18 +1296,23 @@ class TableauDeBordController(http.Controller):
             month, year = month_match.groups()
             # Retourner une clé de tri : (0, année, mois) pour tri chronologique
             return (0, int(year), int(month))
-        
+
         # Détecter les dates au format "YYYY" (groupement date:year)
         year_match = re.match(r'^(\d{4})$', label_str)
         if year_match:
             return (0, int(year_match.group(1)), 0)
-        
+
         # Détecter les dates au format "Q1/2024", "Q2/2024" (groupement date:quarter)
         quarter_match = re.match(r'^Q(\d)/(\d{4})$', label_str)
         if quarter_match:
             quarter, year = quarter_match.groups()
             return (0, int(year), 0, int(quarter))
-        
+
+        # Simple nom de mois français seul (ex: "août"), sans année
+        month_only = label_str.strip().lower()
+        if month_only in french_months:
+            return (0, 0, french_months[month_only])
+
         # Essayer de convertir en nombre pour tri numérique
         try:
             return (1, float(label_str.replace(',', '.').replace(' ', '')))
